@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>WebGIS Platform</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script>
+    /* Enable SharedArrayBuffer (needed by sql.js) on GitHub Pages via service worker */
+    if (!crossOriginIsolated && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("./coi-serviceworker.js").then((reg) => {
+        if (!sessionStorage.getItem("coi-reload")) {
+          sessionStorage.setItem("coi-reload", "1");
+          location.reload();
+        } else {
+          sessionStorage.removeItem("coi-reload");
+        }
+      });
+    }
+  </script>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="https://unpkg.com/@mapbox/mapbox-gl-draw@1.5.1/dist/mapbox-gl-draw.css" />
 </head>
