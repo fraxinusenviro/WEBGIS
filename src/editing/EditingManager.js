@@ -156,9 +156,8 @@ export class EditingManager {
     const requiredFields = schema.filter(f => f.required && !f.isUUID && (f.defaultValue === undefined || f.defaultValue === ''));
     if (!requiredFields.length) { onComplete(feature); return; }
 
-    const { openModal, closeModal } = { openModal: null, closeModal: null };
     // Dynamic import to avoid circular deps
-    import('./ui/Modal.js').then(({ openModal, closeModal }) => {
+    import('../ui/Modal.js').then(({ openModal, closeModal }) => {
       const content = document.createElement('div');
       content.innerHTML = `
         <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Fill in required fields for this feature:</p>

@@ -1,7 +1,6 @@
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { layerManager } from '../layers/LayerManager.js';
 import { exportManager } from '../io/ExportManager.js';
-import { SymbologyPanel } from './SymbologyPanel.js';
 
 /**
  * TOCPanel — Table of Contents (layer list)
@@ -11,7 +10,6 @@ export class TOCPanel {
     this._container = document.getElementById('layer-list');
     this._selectedLayerId = null;
     this._dragSrc = null;
-    this._symbologyPanel = new SymbologyPanel();
 
     bus.on(EVENTS.LAYER_ADDED, () => this.render());
     bus.on(EVENTS.LAYER_REMOVED, () => this.render());

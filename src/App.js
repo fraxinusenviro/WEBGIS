@@ -16,6 +16,7 @@ import { GeoprocessingPanel } from './ui/GeoprocessingPanel.js';
 import { ServiceDialog } from './ui/ServiceDialog.js';
 import { AttributeTable } from './ui/AttributeTable.js';
 import { IdentifyPanel } from './ui/IdentifyPanel.js';
+import { dataCatalog } from './ui/DataCatalog.js';
 import { zoomToScale } from './utils/coordinates.js';
 
 /**
@@ -31,6 +32,7 @@ export class App {
     this._serviceDialog = null;
     this._attrTable = null;
     this._identifyPanel = null;
+    this._dataCatalog = null;
   }
 
   async init() {
@@ -50,6 +52,7 @@ export class App {
     this._serviceDialog = new ServiceDialog();
     this._attrTable = new AttributeTable();
     this._identifyPanel = new IdentifyPanel();
+    this._dataCatalog = dataCatalog;
 
     // Wire toolbar buttons
     this._bindToolbar();
@@ -145,6 +148,10 @@ export class App {
 
     document.getElementById('btn-geoprocessing')?.addEventListener('click', () => {
       bus.emit(EVENTS.SHOW_GP_PANEL);
+    });
+
+    document.getElementById('btn-data-catalog')?.addEventListener('click', () => {
+      this._dataCatalog.open();
     });
 
     document.getElementById('btn-attribute-table')?.addEventListener('click', () => {
