@@ -1042,3 +1042,41 @@ input[type="range"]::-moz-range-thumb {
 .text-accent { color: var(--accent); }
 .text-danger { color: var(--danger); }
 .monospace { font-family: var(--mono); }
+
+/* ============================================================
+   FEATURE 6 — Inline Symbology Pane
+   ============================================================ */
+.layer-symbology {
+  display: none;
+  padding: 8px 12px 10px;
+  background: var(--bg-base);
+  border-top: 1px solid var(--border);
+  gap: 6px;
+}
+.layer-symbology.open { display: grid; grid-template-columns: auto 1fr; align-items: center; }
+.layer-symbology label { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+.symbology-color { width: 28px; height: 22px; border: 1px solid var(--border-light); border-radius: 3px; cursor: pointer; background: none; padding: 1px; }
+.symbology-full-btn { grid-column: 1/-1; margin-top: 4px; width: 100%; }
+
+/* ============================================================
+   FEATURE 7/9 — Data Catalog Panel
+   ============================================================ */
+.data-catalog-tree { list-style: none; padding: 0; margin: 0; }
+.dc-folder { cursor: pointer; user-select: none; }
+.dc-folder-header { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.dc-folder-header:hover { background: var(--bg-hover); }
+.dc-folder-children { padding-left: 16px; }
+.dc-layer-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; }
+.dc-layer-item:hover { background: var(--bg-hover); }
+.dc-layer-item.selected { background: var(--bg-active); color: var(--accent); }
+.dc-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); padding: 12px 8px 4px; }
+.schema-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+.schema-table th { background: var(--bg-input); padding: 5px 6px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+.schema-table td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.schema-table input[type=text], .schema-table select { width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); padding: 2px 4px; font-size: 11px; }
+.schema-table input[type=checkbox] { cursor: pointer; }
+.btn-add-field { font-size: 11px; padding: 4px 10px; margin-top: 8px; }
+.dc-ctx-menu { position: fixed; z-index: 3000; background: var(--bg-panel); border: 1px solid var(--border-light); border-radius: var(--radius); box-shadow: var(--shadow); padding: 4px 0; min-width: 180px; }
+.dc-ctx-item { padding: 7px 14px; font-size: 12px; cursor: pointer; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.dc-ctx-item:hover { background: var(--bg-hover); color: var(--accent); }
+.dc-ctx-item svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }

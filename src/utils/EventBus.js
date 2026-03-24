@@ -71,4 +71,5 @@ export const EVENTS = {
   SHOW_GP_PANEL:      'ui:gpPanel',
   SHOW_SERVICE_DIALOG:'ui:serviceDialog',
   SHOW_IDENTIFY:      'ui:identify',
+  SHOW_DATA_CATALOG:  'ui:dataCatalog',
 };
