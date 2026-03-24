@@ -109,8 +109,9 @@ export class LayerManager {
     const layer = this._layers[idx];
     this._layers.splice(idx, 1);
     this._removeFromMap(layer);
+    if (this._map) this._map.triggerRepaint?.();
     await storage.deleteLayerData(id);
-    bus.emit(EVENTS.LAYER_REMOVED, { id });
+    bus.emit(EVENTS.LAYER_REMOVED, layer);
     bus.emit(EVENTS.PROJECT_DIRTY);
   }
 
@@ -150,6 +151,7 @@ export class LayerManager {
     this._layers = orderedIds.map(id => map.get(id)).filter(Boolean);
     this._syncMapOrder();
     bus.emit(EVENTS.LAYER_ORDER, this._layers.map(l => l.id));
+    bus.emit(EVENTS.LAYER_UPDATED, null);
     bus.emit(EVENTS.PROJECT_DIRTY);
   }
 
@@ -647,16 +649,17 @@ export class LayerManager {
   /** Sync z-order of MapLibre layers to match _layers array (top of array = on top of map) */
   _syncMapOrder() {
     if (!this._map) return;
-    // Move layers in order from bottom to top of stack
-    // _layers[0] is bottom, _layers[last] is top
-    for (let i = 0; i < this._layers.length; i++) {
-      const layer = this._layers[i];
+    // Collect all user ML layer IDs in order from bottom (_layers[0]) to top (_layers[last])
+    const allMlIds = [];
+    for (const layer of this._layers) {
       for (const mlId of (layer._mlLayerIds || [])) {
-        if (this._map.getLayer(mlId)) {
-          // Move above previous layer's last id or to back
-          this._map.moveLayer(mlId);
-        }
+        if (this._map.getLayer(mlId)) allMlIds.push(mlId);
       }
+    }
+    // Move from bottom to top - each one moves to top sequentially
+    // so the last one ends up on top, preserving relative order
+    for (const mlId of allMlIds) {
+      try { this._map.moveLayer(mlId); } catch(e) {}
     }
   }
 

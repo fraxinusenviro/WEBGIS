@@ -14,14 +14,30 @@ const SERVICE_TYPES = [
 
 // Preset services for quick access
 const PRESETS = [
-  { name: 'OpenStreetMap', type: 'xyz', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' },
-  { name: 'ESRI World Imagery', type: 'xyz', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}' },
-  { name: 'NASA GIBS Blue Marble', type: 'xyz', url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg' },
-  { name: 'USGS Topo', type: 'xyz', url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}' },
-  { name: 'USGS Imagery', type: 'xyz', url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}' },
-  { name: 'Stadia Stamen Terrain', type: 'xyz', url: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.jpg' },
-  { name: 'OpenTopoMap', type: 'xyz', url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' },
-  { name: 'NOAA NCEI WMS', type: 'wms', url: 'https://gis.ncei.noaa.gov/arcgis/services/cod/NCEI_1day_COD/MapServer/WMSServer' },
+  // General basemaps
+  { group: 'General', name: 'OpenStreetMap', type: 'xyz', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attribution: '© OpenStreetMap contributors' },
+  { group: 'General', name: 'OpenTopoMap', type: 'xyz', url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png', attribution: '© OpenTopoMap' },
+  { group: 'General', name: 'ESRI World Imagery', type: 'xyz', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attribution: '© Esri, Maxar' },
+  { group: 'General', name: 'ESRI World Street Map', type: 'esri-map', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer' },
+  { group: 'General', name: 'ESRI World Imagery (REST)', type: 'esri-map', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer' },
+  { group: 'General', name: 'USGS Topo', type: 'xyz', url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}', attribution: '© USGS' },
+  { group: 'General', name: 'USGS Imagery', type: 'xyz', url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}', attribution: '© USGS' },
+  { group: 'General', name: 'Stadia Stamen Terrain', type: 'xyz', url: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.jpg', attribution: '© Stadia Maps, Stamen' },
+  // NASA
+  { group: 'NASA', name: 'NASA GIBS MODIS Terra (WMS)', type: 'wms', url: 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi', layers: 'MODIS_Terra_CorrectedReflectance_TrueColor' },
+  { group: 'NASA', name: 'NASA Blue Marble', type: 'xyz', url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg', attribution: '© NASA' },
+  // USGS
+  { group: 'USGS', name: 'USGS National Streamflow Stations (WFS)', type: 'wfs', url: 'https://labs.waterdata.usgs.gov/geoserver/wmadata/ows' },
+  { group: 'USGS', name: 'USGS TNM Topo (WMS)', type: 'wms', url: 'https://basemap.nationalmap.gov/arcgis/services/USGSTopo/MapServer/WMSServer' },
+  // Canada
+  { group: 'Canada', name: 'NRCan DTM Hillshade (WMS)', type: 'wms', url: 'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic', layers: 'dtm-hillshade' },
+  { group: 'Canada', name: 'NRCan DSM Hillshade (WMS)', type: 'wms', url: 'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic', layers: 'dsm-hillshade' },
+  // Nova Scotia
+  { group: 'Nova Scotia', name: 'NS Property Registry NSPRD (WMS)', type: 'wms', url: 'https://nsgiwa2.novascotia.ca/arcgis/services/PLAN/PLAN_NSPRD_NoLabels_UT83/MapServer/WMSServer' },
+  { group: 'Nova Scotia', name: 'NS Crown Parcels (WMS)', type: 'wms', url: 'https://nsgiwa.novascotia.ca/arcgis/services/PLAN/PLAN_SimplifiedCrownParcels_UT83/MapServer/WMSServer' },
+  // Other
+  { group: 'Other', name: 'ESRI World Imagery (WMTS)', type: 'wmts', url: 'https://server.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/WMTS/1.0.0/WMTSCapabilities.xml' },
+  { group: 'Other', name: 'Example COG – NOAA Harvey', type: 'cog', url: 'https://noaa-emergency-response.s3.amazonaws.com/storms/harvey_2017/cog/20170901_NOAA_Harvey_TX_1m.tif' },
 ];
 
 export class ServiceDialog {
@@ -122,20 +138,36 @@ export class ServiceDialog {
     `;
     content.appendChild(manualTab);
 
+    // Build grouped preset HTML
+    const groups = {};
+    for (const p of PRESETS) {
+      const g = p.group || 'Other';
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(p);
+    }
+    const groupedHtml = Object.entries(groups).map(([groupName, items]) => `
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);padding:4px 0 6px">${groupName}</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${items.map(p => `
+            <button class="btn btn-secondary preset-btn" data-type="${p.type}" data-url="${encodeURIComponent(p.url)}" data-layers="${p.layers || ''}" data-attribution="${p.attribution || ''}" style="justify-content:flex-start;text-align:left">
+              <div>
+                <div style="font-weight:500;font-size:12px">${p.name}</div>
+                <div style="font-size:10px;color:var(--text-muted)">${p.type.toUpperCase()} · ${p.url.slice(0, 50)}…</div>
+              </div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+
     const presetsTab = document.createElement('div');
     presetsTab.id = 'tab-presets';
     presetsTab.style.display = 'none';
     presetsTab.innerHTML = `
       <p class="form-hint" style="margin-bottom:10px">Click a preset to add it directly:</p>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${PRESETS.map(p => `
-          <button class="btn btn-secondary preset-btn" data-type="${p.type}" data-url="${p.url}" style="justify-content:flex-start;text-align:left">
-            <div>
-              <div style="font-weight:500;font-size:12px">${p.name}</div>
-              <div style="font-size:10px;color:var(--text-muted)">${p.type.toUpperCase()} · ${p.url.slice(0, 50)}…</div>
-            </div>
-          </button>
-        `).join('')}
+      <div style="overflow-y:auto;max-height:400px">
+        ${groupedHtml}
       </div>
     `;
     content.appendChild(presetsTab);

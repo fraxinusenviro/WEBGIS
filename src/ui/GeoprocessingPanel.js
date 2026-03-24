@@ -111,12 +111,11 @@ export class GeoprocessingPanel {
       width: 380,
     });
     document.querySelector('#gp-run').addEventListener('click', async () => {
+      const layerId = document.querySelector('#gp-layer-a')?.value;
+      const dist = parseFloat(document.querySelector('#gp-buf-dist')?.value || 1);
+      const units = document.querySelector('#gp-buf-units')?.value || 'kilometers';
       closeModal();
-      await this._run(() => gpTools.buffer(
-        document.querySelector('#gp-layer-a')?.value,
-        parseFloat(document.querySelector('#gp-buf-dist')?.value || 1),
-        document.querySelector('#gp-buf-units')?.value || 'kilometers',
-      ));
+      await this._run(() => gpTools.buffer(layerId, dist, units));
     });
     document.querySelector('#gp-cancel').addEventListener('click', closeModal);
   }
@@ -150,9 +149,10 @@ export class GeoprocessingPanel {
     });
 
     document.querySelector('#gp-run').addEventListener('click', async () => {
-      closeModal();
+      const layerId = document.querySelector('#gp-layer-a')?.value;
       const field = document.querySelector('#gp-dissolve-field')?.value || null;
-      await this._run(() => gpTools.dissolve(document.querySelector('#gp-layer-a')?.value, field || null));
+      closeModal();
+      await this._run(() => gpTools.dissolve(layerId, field || null));
     });
     document.querySelector('#gp-cancel').addEventListener('click', closeModal);
   }
@@ -180,9 +180,9 @@ export class GeoprocessingPanel {
     openModal({ title: titles[toolId] || toolId, content, footer: footerHtml(), width: 380 });
 
     document.querySelector('#gp-run').addEventListener('click', async () => {
-      closeModal();
       const a = document.querySelector('#gp-layer-a')?.value;
       const b = document.querySelector('#gp-layer-b')?.value;
+      closeModal();
       const fns = {
         clip: () => gpTools.clip(a, b),
         intersect: () => gpTools.intersect(a, b),
@@ -207,8 +207,8 @@ export class GeoprocessingPanel {
     openModal({ title, content, footer: footerHtml(), width: 340 });
 
     document.querySelector('#gp-run').addEventListener('click', async () => {
-      closeModal();
       const a = document.querySelector('#gp-layer-a')?.value;
+      closeModal();
       const fns = {
         'convex-hull': () => gpTools.convexHull(a),
         centroid: () => gpTools.centroid(a),
@@ -237,11 +237,10 @@ export class GeoprocessingPanel {
     openModal({ title: 'Simplify', content, footer: footerHtml(), width: 380 });
 
     document.querySelector('#gp-run').addEventListener('click', async () => {
+      const layerId = document.querySelector('#gp-layer-a')?.value;
+      const tol = parseFloat(document.querySelector('#gp-simplify-tol')?.value || 0.001);
       closeModal();
-      await this._run(() => gpTools.simplify(
-        document.querySelector('#gp-layer-a')?.value,
-        parseFloat(document.querySelector('#gp-simplify-tol')?.value || 0.001),
-      ));
+      await this._run(() => gpTools.simplify(layerId, tol));
     });
     document.querySelector('#gp-cancel').addEventListener('click', closeModal);
   }
@@ -266,9 +265,9 @@ export class GeoprocessingPanel {
     openModal({ title, content, footer: footerHtml(), width: 360 });
 
     document.querySelector('#gp-run').addEventListener('click', async () => {
-      closeModal();
       const a = document.querySelector('#gp-layer-a')?.value;
       const units = document.querySelector('#gp-calc-units')?.value;
+      closeModal();
       await this._run(() => toolId === 'calc-area' ? gpTools.calculateArea(a, units) : gpTools.calculateLength(a, units));
     });
     document.querySelector('#gp-cancel').addEventListener('click', closeModal);
@@ -289,8 +288,8 @@ export class GeoprocessingPanel {
     openModal({ title: 'Merge Layers', content, footer: footerHtml(), width: 360 });
 
     document.querySelector('#gp-run').addEventListener('click', async () => {
-      closeModal();
       const ids = Array.from(document.querySelectorAll('.merge-chk:checked')).map(c => c.value);
+      closeModal();
       if (ids.length < 2) { bus.emit(EVENTS.SHOW_TOAST, { type: 'warning', message: 'Select at least 2 layers to merge' }); return; }
       await this._run(() => gpTools.mergeLayers(ids));
     });
