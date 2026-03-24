@@ -1,6 +1,7 @@
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { layerManager } from '../layers/LayerManager.js';
 import { exportManager } from '../io/ExportManager.js';
+import { SymbologyPanel } from './SymbologyPanel.js';
 
 /**
  * TOCPanel — Table of Contents (layer list)
@@ -10,6 +11,7 @@ export class TOCPanel {
     this._container = document.getElementById('layer-list');
     this._selectedLayerId = null;
     this._dragSrc = null;
+    this._symbologyPanel = new SymbologyPanel();
 
     bus.on(EVENTS.LAYER_ADDED, () => this.render());
     bus.on(EVENTS.LAYER_REMOVED, () => this.render());
@@ -75,23 +77,14 @@ export class TOCPanel {
           </button>
         </div>
       </div>
-      <div class="layer-expand" id="expand-${layer.id}">
-        <div class="layer-expand-row">
-          <span class="layer-expand-label">Opacity</span>
-          <input type="range" class="opacity-slider" min="0" max="1" step="0.05" value="${layer.opacity}" style="flex:1" />
-          <span class="opacity-val" style="min-width:32px;text-align:right;font-size:11px;color:var(--text-secondary)">${Math.round(layer.opacity * 100)}%</span>
-        </div>
-        <div class="layer-expand-row">
-          <span class="layer-expand-label">Color</span>
-          <div class="layer-swatch" style="background:${styleColor}" title="Click to edit symbology"></div>
-          <span style="font-size:11px;color:var(--text-muted);margin-left:6px">${layer.geometryType || layer.type}</span>
-        </div>
+      <div class="layer-symbology" id="expand-${layer.id}">
+        ${this._buildSymbologyPane(layer)}
       </div>
     `;
 
     // Events
     const header = item.querySelector('.layer-header');
-    const expandPanel = item.querySelector('.layer-expand');
+    const expandPanel = item.querySelector('.layer-symbology');
 
     // Select on click
     header.addEventListener('click', (e) => {
@@ -101,7 +94,7 @@ export class TOCPanel {
       bus.emit(EVENTS.LAYER_SELECTED, layer);
     });
 
-    // Expand on double-click header
+    // Expand symbology pane on double-click header
     header.addEventListener('dblclick', () => {
       expandPanel.classList.toggle('open');
     });
@@ -118,10 +111,10 @@ export class TOCPanel {
       layerManager.zoomToLayer(layer.id);
     });
 
-    // Style
+    // Style button — toggle inline symbology pane
     item.querySelector('.btn-style').addEventListener('click', (e) => {
       e.stopPropagation();
-      bus.emit(EVENTS.SHOW_SYMBOLOGY, layer);
+      expandPanel.classList.toggle('open');
     });
 
     // Attribute table
@@ -147,19 +140,8 @@ export class TOCPanel {
       }
     });
 
-    // Opacity slider
-    const opacitySlider = item.querySelector('.opacity-slider');
-    const opacityVal = item.querySelector('.opacity-val');
-    opacitySlider.addEventListener('input', (e) => {
-      const val = parseFloat(e.target.value);
-      opacityVal.textContent = `${Math.round(val * 100)}%`;
-      layerManager.updateLayer(layer.id, { opacity: val });
-    });
-
-    // Color swatch click → symbology
-    item.querySelector('.layer-swatch').addEventListener('click', () => {
-      bus.emit(EVENTS.SHOW_SYMBOLOGY, layer);
-    });
+    // Wire inline symbology controls
+    this._bindSymbologyPane(item, layer);
 
     // Drag and drop reorder
     item.addEventListener('dragstart', (e) => {
@@ -186,6 +168,150 @@ export class TOCPanel {
     });
 
     return item;
+  }
+
+  _buildSymbologyPane(layer) {
+    const s = layer.style || {};
+    const isVector = layer.type === 'vector' || layer.type === 'esri-feature';
+    const gt = layer.geometryType;
+
+    if (!isVector) {
+      // Raster/tile: just opacity slider
+      return `
+        <label>Opacity</label>
+        <div style="display:flex;align-items:center;gap:6px;grid-column:1/-1">
+          <input type="range" class="sym-opacity-slider" min="0" max="1" step="0.05" value="${layer.opacity}" style="flex:1">
+          <span class="sym-opacity-val" style="font-size:11px;min-width:32px;text-align:right">${Math.round(layer.opacity * 100)}%</span>
+        </div>
+        <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
+      `;
+    }
+
+    if (gt === 'Point') {
+      return `
+        <label>Fill</label>
+        <input type="color" class="symbology-color sym-fill-color" value="${s.pointColor || '#60a5fa'}">
+        <label>Radius</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="range" class="sym-radius-slider" min="4" max="20" step="1" value="${s.pointRadius || 6}" style="flex:1">
+          <span class="sym-radius-val" style="font-size:11px;min-width:24px;text-align:right">${s.pointRadius || 6}</span>
+        </div>
+        <label>Stroke</label>
+        <input type="color" class="symbology-color sym-stroke-color" value="${s.strokeColor || '#ffffff'}">
+        <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
+      `;
+    }
+
+    if (gt === 'LineString') {
+      return `
+        <label>Color</label>
+        <input type="color" class="symbology-color sym-line-color" value="${s.lineColor || '#f97316'}">
+        <label>Width</label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input type="range" class="sym-linewidth-slider" min="1" max="10" step="0.5" value="${s.lineWidth || 2}" style="flex:1">
+          <span class="sym-linewidth-val" style="font-size:11px;min-width:24px;text-align:right">${s.lineWidth || 2}</span>
+        </div>
+        <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
+      `;
+    }
+
+    // Polygon
+    return `
+      <label>Fill</label>
+      <input type="color" class="symbology-color sym-fill-color" value="${s.fillColor || '#a78bfa'}">
+      <label>Fill Opacity</label>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input type="range" class="sym-fillopacity-slider" min="0" max="1" step="0.05" value="${s.fillOpacity ?? 0.35}" style="flex:1">
+        <span class="sym-fillopacity-val" style="font-size:11px;min-width:32px;text-align:right">${Math.round((s.fillOpacity ?? 0.35) * 100)}%</span>
+      </div>
+      <label>Stroke</label>
+      <input type="color" class="symbology-color sym-stroke-color" value="${s.strokeColor || '#a78bfa'}">
+      <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
+    `;
+  }
+
+  _bindSymbologyPane(item, layer) {
+    const s = layer.style || {};
+    const isVector = layer.type === 'vector' || layer.type === 'esri-feature';
+    const gt = layer.geometryType;
+
+    // Opacity slider (raster/tile only)
+    const opacitySlider = item.querySelector('.sym-opacity-slider');
+    const opacityVal = item.querySelector('.sym-opacity-val');
+    if (opacitySlider) {
+      opacitySlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (opacityVal) opacityVal.textContent = `${Math.round(val * 100)}%`;
+        layerManager.updateLayer(layer.id, { opacity: val });
+      });
+    }
+
+    // Fill / point color
+    const fillColor = item.querySelector('.sym-fill-color');
+    if (fillColor) {
+      fillColor.addEventListener('input', (e) => {
+        if (gt === 'Point') layerManager.updateStyle(layer.id, { pointColor: e.target.value });
+        else if (gt === 'Polygon') layerManager.updateStyle(layer.id, { fillColor: e.target.value });
+      });
+    }
+
+    // Point radius
+    const radiusSlider = item.querySelector('.sym-radius-slider');
+    const radiusVal = item.querySelector('.sym-radius-val');
+    if (radiusSlider) {
+      radiusSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (radiusVal) radiusVal.textContent = val;
+        layerManager.updateStyle(layer.id, { pointRadius: val });
+      });
+    }
+
+    // Stroke color
+    const strokeColor = item.querySelector('.sym-stroke-color');
+    if (strokeColor) {
+      strokeColor.addEventListener('input', (e) => {
+        layerManager.updateStyle(layer.id, { strokeColor: e.target.value });
+      });
+    }
+
+    // Line color
+    const lineColor = item.querySelector('.sym-line-color');
+    if (lineColor) {
+      lineColor.addEventListener('input', (e) => {
+        layerManager.updateStyle(layer.id, { lineColor: e.target.value });
+      });
+    }
+
+    // Line width
+    const lineWidthSlider = item.querySelector('.sym-linewidth-slider');
+    const lineWidthVal = item.querySelector('.sym-linewidth-val');
+    if (lineWidthSlider) {
+      lineWidthSlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (lineWidthVal) lineWidthVal.textContent = val;
+        layerManager.updateStyle(layer.id, { lineWidth: val });
+      });
+    }
+
+    // Fill opacity
+    const fillOpacitySlider = item.querySelector('.sym-fillopacity-slider');
+    const fillOpacityVal = item.querySelector('.sym-fillopacity-val');
+    if (fillOpacitySlider) {
+      fillOpacitySlider.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        if (fillOpacityVal) fillOpacityVal.textContent = `${Math.round(val * 100)}%`;
+        layerManager.updateStyle(layer.id, { fillOpacity: val });
+      });
+    }
+
+    // Full Symbology button
+    const fullBtn = item.querySelector('.symbology-full-btn');
+    if (fullBtn) {
+      fullBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        bus.emit(EVENTS.SHOW_SYMBOLOGY, layer);
+      });
+    }
   }
 
   _reorderLayers(draggedId, targetId) {

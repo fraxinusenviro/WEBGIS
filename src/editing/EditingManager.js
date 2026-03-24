@@ -104,6 +104,93 @@ export class EditingManager {
     this._draw.deleteAll();
   }
 
+  // ---- Geometry attribute calculation ----
+  _calcGeomAttributes(feature) {
+    const geom = feature.geometry;
+    if (!geom) return feature;
+    const props = { ...(feature.properties || {}) };
+    const type = geom.type;
+
+    if (type === 'LineString' || type === 'MultiLineString') {
+      const lengthKm = turf.length(feature, { units: 'kilometers' });
+      props.length_km = Math.round(lengthKm * 100) / 100;
+      props.length_m = Math.round(lengthKm * 1000 * 100) / 100;
+    } else if (type === 'Polygon' || type === 'MultiPolygon') {
+      const areaM2 = turf.area(feature);
+      props.area_m2 = Math.round(areaM2 * 100) / 100;
+      props.area_ha = Math.round((areaM2 / 10000) * 100) / 100;
+      // Perimeter: length of outer ring as LineString
+      try {
+        const coords = type === 'Polygon' ? geom.coordinates[0] : geom.coordinates[0][0];
+        const ring = turf.lineString(coords);
+        const perimKm = turf.length(ring, { units: 'kilometers' });
+        props.perimeter_m = Math.round(perimKm * 1000 * 100) / 100;
+      } catch(e) {}
+    }
+
+    return { ...feature, properties: props };
+  }
+
+  // ---- Schema attribute population ----
+  _applySchema(feature, layer) {
+    if (!layer?.metadata?.schema?.length) return feature;
+    const schema = layer.metadata.schema;
+    const props = { ...(feature.properties || {}) };
+
+    for (const field of schema) {
+      if (field.isUUID) {
+        if (!props[field.name]) props[field.name] = crypto.randomUUID();
+      } else if (props[field.name] === undefined || props[field.name] === null) {
+        props[field.name] = field.defaultValue !== undefined ? field.defaultValue : '';
+      }
+    }
+
+    return { ...feature, properties: props };
+  }
+
+  // ---- Show schema dialog for required non-auto fields ----
+  _showSchemaDialog(feature, layer, onComplete) {
+    const schema = layer?.metadata?.schema;
+    if (!schema?.length) { onComplete(feature); return; }
+
+    const requiredFields = schema.filter(f => f.required && !f.isUUID && (f.defaultValue === undefined || f.defaultValue === ''));
+    if (!requiredFields.length) { onComplete(feature); return; }
+
+    const { openModal, closeModal } = { openModal: null, closeModal: null };
+    // Dynamic import to avoid circular deps
+    import('./ui/Modal.js').then(({ openModal, closeModal }) => {
+      const content = document.createElement('div');
+      content.innerHTML = `
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Fill in required fields for this feature:</p>
+        ${requiredFields.map(f => `
+          <div class="form-group">
+            <label class="form-label">${f.name} (${f.type})</label>
+            <input class="form-input" type="${f.type === 'Number' || f.type === 'Integer' ? 'number' : 'text'}" id="schema-field-${f.name}" placeholder="${f.name}">
+          </div>
+        `).join('')}
+      `;
+      openModal({
+        title: `New Feature — ${layer.name}`,
+        content,
+        footer: `<button class="btn btn-ghost" id="schema-skip">Skip</button><button class="btn btn-primary" id="schema-ok">OK</button>`,
+        width: 360,
+      });
+      const finish = () => {
+        const props = { ...(feature.properties || {}) };
+        for (const f of requiredFields) {
+          const el = document.querySelector(`#schema-field-${f.name}`);
+          if (el?.value) {
+            props[f.name] = (f.type === 'Number' || f.type === 'Integer') ? Number(el.value) : el.value;
+          }
+        }
+        closeModal();
+        onComplete({ ...feature, properties: props });
+      };
+      document.querySelector('#schema-ok')?.addEventListener('click', finish);
+      document.querySelector('#schema-skip')?.addEventListener('click', () => { closeModal(); onComplete(feature); });
+    }).catch(() => onComplete(feature));
+  }
+
   // ---- Draw event handlers ----
   async _onDrawCreate(e) {
     const features = e.features;
@@ -111,36 +198,58 @@ export class EditingManager {
 
     this._pushHistory('create', features);
 
+    // Auto-calculate geometry attributes
+    const enrichedFeatures = features.map(f => this._calcGeomAttributes(f));
+
     if (this._editLayerId) {
       // Add to existing layer
       const layer = layerManager.layers.find(l => l.id === this._editLayerId);
       if (layer?.data) {
-        const newData = {
-          ...layer.data,
-          features: [
-            ...layer.data.features,
-            ...features.map(f => ({ ...f, id: undefined, properties: f.properties || {} })),
-          ],
+        // Apply schema defaults/UUID first
+        const schemaFeatures = enrichedFeatures.map(f => this._applySchema(f, layer));
+
+        const addToLayer = (finalFeatures) => {
+          const newData = {
+            ...layer.data,
+            features: [
+              ...layer.data.features,
+              ...finalFeatures.map(f => ({ ...f, id: undefined, properties: f.properties || {} })),
+            ],
+          };
+          layerManager.updateData(this._editLayerId, newData);
+          bus.emit(EVENTS.EDIT_FEATURE_ADDED, { features: finalFeatures });
+          if (finalFeatures[0]?.geometry?.type === 'Point') {
+            this.setMode('simple_select');
+          }
         };
-        layerManager.updateData(this._editLayerId, newData);
+
+        // Show schema dialog for required fields if layer has schema
+        if (layer.metadata?.schema?.length && schemaFeatures.length === 1) {
+          this._showSchemaDialog(schemaFeatures[0], layer, (finalFeature) => {
+            addToLayer([finalFeature]);
+          });
+        } else {
+          addToLayer(schemaFeatures);
+        }
+        return;
       }
     } else {
       // Create new layer from these features
-      const geomType = detectGeometryType({ type: 'FeatureCollection', features });
+      const geomType = detectGeometryType({ type: 'FeatureCollection', features: enrichedFeatures });
       const newLayer = await layerManager.addLayer({
         name: `New ${geomType} Layer`,
         type: 'vector',
-        data: { type: 'FeatureCollection', features: features.map(f => ({ ...f, id: undefined })) },
+        data: { type: 'FeatureCollection', features: enrichedFeatures.map(f => ({ ...f, id: undefined })) },
         geometryType: geomType,
         sourceFormat: 'drawn',
       });
       this._editLayerId = newLayer.id;
     }
 
-    bus.emit(EVENTS.EDIT_FEATURE_ADDED, { features });
+    bus.emit(EVENTS.EDIT_FEATURE_ADDED, { features: enrichedFeatures });
 
     // Return to select mode after point/single feature
-    if (features[0]?.geometry?.type === 'Point') {
+    if (enrichedFeatures[0]?.geometry?.type === 'Point') {
       this.setMode('simple_select');
     }
   }
@@ -151,20 +260,23 @@ export class EditingManager {
 
     this._pushHistory('update', features);
 
+    // Auto-calculate geometry attributes on update
+    const enrichedFeatures = features.map(f => this._calcGeomAttributes(f));
+
     if (this._editLayerId) {
       const layer = layerManager.layers.find(l => l.id === this._editLayerId);
       if (layer?.data) {
-        const updatedIds = new Set(features.map(f => f.id));
+        const updatedIds = new Set(enrichedFeatures.map(f => f.id));
         const newData = {
           ...layer.data,
           features: layer.data.features.map(f =>
-            updatedIds.has(f.id) ? features.find(uf => uf.id === f.id) : f
+            updatedIds.has(f.id) ? enrichedFeatures.find(uf => uf.id === f.id) : f
           ),
         };
         layerManager.updateData(this._editLayerId, newData);
       }
     }
-    bus.emit(EVENTS.EDIT_FEATURE_UPDATED, { features });
+    bus.emit(EVENTS.EDIT_FEATURE_UPDATED, { features: enrichedFeatures });
   }
 
   _onDrawDelete(e) {
