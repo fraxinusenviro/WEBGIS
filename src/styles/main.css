@@ -1168,7 +1168,7 @@ input[type="range"]::-moz-range-thumb {
   display: flex; align-items: center; justify-content: center;
 }
 .bm-vis-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
-.bm-vis-btn.hidden { color: var(--text-muted); }
+.bm-vis-btn.bm-off { color: var(--text-muted); }
 .bm-vis-btn:hover { background: var(--bg-hover); }
 
 .bm-name {
