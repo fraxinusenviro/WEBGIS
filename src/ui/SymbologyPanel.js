@@ -380,8 +380,14 @@ export class SymbologyPanel {
       if (opacityEl) {
         layerManager.updateLayer(layer.id, { opacity: parseFloat(opacityEl.value) });
       }
-      if (onClose) onClose();
-      else bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'Symbology applied' });
+      if (onClose) {
+        onClose();
+      } else {
+        // Re-render the docked panel so it reflects the updated style
+        // and re-binds event listeners with fresh state
+        this.renderInto(container, layer);
+        bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'Symbology applied' });
+      }
     });
 
     // Cancel

@@ -1380,6 +1380,7 @@ input[type="range"]::-moz-range-thumb {
 
 .rp-content {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1387,10 +1388,14 @@ input[type="range"]::-moz-range-thumb {
 
 .rp-pane {
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
+.rp-pane::-webkit-scrollbar { width: 4px; }
+.rp-pane::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* Symbology empty state inside right panel */
 .rp-sym-empty {

@@ -2,8 +2,8 @@
  * Basemap definitions for MapLibre GL JS
  *
  * HRDEM services are provided by Natural Resources Canada (NRCan).
- * WMS endpoint: https://datacube.services.geo.ca/ows/elevation
- * If layer names change, update the LAYERS= parameter in the tile URLs below.
+ * WMS GetMap endpoint: https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic
+ * Layer names verified from GetCapabilities: dtm-hillshade, dsm-hillshade
  */
 export const BASEMAPS = {
   osm: {
@@ -166,8 +166,7 @@ export const BASEMAPS = {
   },
 
   // HRDEM DTM Hillshade — Natural Resources Canada
-  // Source: https://datacube.services.geo.ca/ows/elevation (WMS)
-  // Layer: dtm-hillshade (verify layer name at service endpoint)
+  // GetMap URL verified from WMS GetCapabilities
   'hrdem-dtm-hillshade': {
     name: 'HRDEM DTM Hillshade',
     style: {
@@ -176,7 +175,7 @@ export const BASEMAPS = {
         hrdem_dtm_hs: {
           type: 'raster',
           tiles: [
-            'https://datacube.services.geo.ca/ows/elevation?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+            'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
             '&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256' +
             '&LAYERS=dtm-hillshade&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&CRS=EPSG:3857',
           ],
@@ -190,8 +189,7 @@ export const BASEMAPS = {
   },
 
   // HRDEM DSM Hillshade — Natural Resources Canada
-  // Source: https://datacube.services.geo.ca/ows/elevation (WMS)
-  // Layer: dsm-hillshade (verify layer name at service endpoint)
+  // GetMap URL verified from WMS GetCapabilities
   'hrdem-dsm-hillshade': {
     name: 'HRDEM DSM Hillshade',
     style: {
@@ -200,7 +198,7 @@ export const BASEMAPS = {
         hrdem_dsm_hs: {
           type: 'raster',
           tiles: [
-            'https://datacube.services.geo.ca/ows/elevation?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+            'https://datacube.services.geo.ca/wrapper/ogc/elevation-hrdem-mosaic?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
             '&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256' +
             '&LAYERS=dsm-hillshade&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&CRS=EPSG:3857',
           ],

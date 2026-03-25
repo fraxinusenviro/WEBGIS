@@ -1,4 +1,4 @@
-import shp from 'shpjs';
+import shp, { parseShp, parseDbf, combine } from 'shpjs';
 import * as GeoTIFF from 'geotiff';
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { detectCRS, reprojectGeoJSON, transformCoord } from '../utils/coordinates.js';
@@ -12,10 +12,42 @@ export class ImportManager {
   constructor() {}
 
   /**
-   * Main entry: accept File objects or an array thereof
+   * Main entry: accept File objects or an array thereof.
+   * Groups .shp files with their sibling component files (.dbf, .shx, .prj)
+   * when multiple files are selected together.
    */
   async importFiles(files) {
-    for (const file of files) {
+    const fileArr = Array.from(files);
+
+    // Identify .shp files and match with sibling components by base name
+    const shpFiles = fileArr.filter(f => f.name.toLowerCase().endsWith('.shp'));
+    const processedNames = new Set();
+
+    for (const shpFile of shpFiles) {
+      const base = shpFile.name.replace(/\.shp$/i, '').toLowerCase();
+      const bundle = { shp: shpFile, dbf: null, shx: null, prj: null };
+      for (const f of fileArr) {
+        const n = f.name.toLowerCase();
+        if (n === base + '.dbf') bundle.dbf = f;
+        else if (n === base + '.shx') bundle.shx = f;
+        else if (n === base + '.prj') bundle.prj = f;
+      }
+      processedNames.add(shpFile.name.toLowerCase());
+      if (bundle.dbf) processedNames.add(bundle.dbf.name.toLowerCase());
+      if (bundle.shx) processedNames.add(bundle.shx.name.toLowerCase());
+      if (bundle.prj) processedNames.add(bundle.prj.name.toLowerCase());
+
+      try {
+        await this._importShapefileBundle(bundle);
+      } catch(e) {
+        console.error('Import error:', e);
+        bus.emit(EVENTS.SHOW_TOAST, { type: 'error', message: `Failed to import ${shpFile.name}: ${e.message}` });
+      }
+    }
+
+    // Process remaining files that weren't part of a .shp bundle
+    for (const file of fileArr) {
+      if (processedNames.has(file.name.toLowerCase())) continue;
       try {
         await this.importFile(file);
       } catch(e) {
@@ -43,8 +75,8 @@ export class ImportManager {
       case 'zip':
         return this._importShapefileZip(file);
       case 'shp':
-        bus.emit(EVENTS.SHOW_TOAST, { type: 'warning', message: 'Please upload the complete shapefile as a .zip containing .shp, .dbf, .prj' });
-        return;
+        // Single .shp without siblings — attempt with just the shp file, warn if dbf missing
+        return this._importShapefileBundle({ shp: file, dbf: null, shx: null, prj: null });
       case 'tif':
       case 'tiff':
         return this._importGeoTIFF(file);
@@ -161,6 +193,49 @@ export class ImportManager {
       });
     }
     bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: `Imported ${file.name}` });
+  }
+
+  // ---- Shapefile component bundle (.shp + .dbf + optionally .shx/.prj) ----
+  async _importShapefileBundle(bundle) {
+    const { shp: shpFile, dbf: dbfFile } = bundle;
+    const baseName = shpFile.name.replace(/\.[^.]+$/, '');
+    bus.emit(EVENTS.SHOW_TOAST, { type: 'info', message: `Importing ${shpFile.name}…` });
+
+    if (!dbfFile) {
+      bus.emit(EVENTS.SHOW_TOAST, {
+        type: 'warning',
+        message: `No .dbf found for ${shpFile.name} — attributes will be missing. Select .shp, .dbf, .shx, .prj together for full import.`,
+        duration: 6000,
+      });
+    }
+
+    const shpBuffer = await shpFile.arrayBuffer();
+    const dbfBuffer = dbfFile ? await dbfFile.arrayBuffer() : null;
+
+    let geojson;
+    try {
+      if (dbfBuffer) {
+        geojson = combine([parseShp(shpBuffer), parseDbf(dbfBuffer)]);
+      } else {
+        geojson = combine([parseShp(shpBuffer)]);
+      }
+    } catch(e) {
+      throw new Error('Could not parse shapefile components: ' + e.message);
+    }
+
+    const layers = Array.isArray(geojson) ? geojson : [geojson];
+    for (let i = 0; i < layers.length; i++) {
+      const fc = layers[i];
+      const crs = detectCRS(fc);
+      const projected = (crs && crs !== 'EPSG:4326') ? reprojectGeoJSON(fc, crs) : fc;
+      await layerManager.addLayer({
+        name: layers.length > 1 ? `${baseName}_${i + 1}` : baseName,
+        type: 'vector',
+        data: projected,
+        sourceFormat: 'shapefile',
+      });
+    }
+    bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: `Imported ${shpFile.name}` });
   }
 
   // ---- GeoTIFF / COG ----
