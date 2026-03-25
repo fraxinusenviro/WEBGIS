@@ -78,19 +78,6 @@
             <span>Catalog</span>
           </button>
         </div>
-        <div class="toolbar-sep"></div>
-        <div class="toolbar-group">
-          <select id="basemap-select" class="tb-select" title="Select Basemap">
-            <option value="osm">OpenStreetMap</option>
-            <option value="topo">OpenTopoMap</option>
-            <option value="satellite">ESRI Satellite</option>
-            <option value="esri-topo">ESRI Topo</option>
-            <option value="dark">Dark Matter</option>
-            <option value="positron">Positron</option>
-            <option value="nasa-blue">NASA Blue Marble</option>
-            <option value="none">None</option>
-          </select>
-        </div>
       </nav>
       <div class="toolbar-right">
         <div class="project-name" id="project-name-display">Untitled Project</div>
@@ -116,6 +103,13 @@
             <svg viewBox="0 0 24 24"><path d="M3 6l9-3 9 3-9 3z"/><path d="M3 12l9-3 9 3-9 3z"/><path d="M3 18l9-3 9 3-9 3z"/></svg>
             <p>No layers yet.<br>Add a file or service to begin.</p>
           </div>
+        </div>
+        <div class="toc-section-header">
+          <span class="toc-section-label">Basemaps</span>
+          <button class="panel-btn" id="btn-add-basemap" title="Add Basemap">+</button>
+        </div>
+        <div id="basemap-list" class="basemap-list">
+          <div class="bm-empty">No basemaps. Click + to add one.</div>
         </div>
         <div class="panel-footer">
           <button class="footer-btn" id="btn-zoom-all" title="Zoom to all layers">

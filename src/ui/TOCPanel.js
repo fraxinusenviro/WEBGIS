@@ -1,6 +1,10 @@
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { layerManager } from '../layers/LayerManager.js';
 import { exportManager } from '../io/ExportManager.js';
+import { editingManager } from '../editing/EditingManager.js';
+import { basemapLayerManager, BM_EVENTS } from '../map/BasemapLayerManager.js';
+import { BASEMAPS } from '../map/BasemapManager.js';
+import { openModal, closeModal } from './Modal.js';
 
 /**
  * TOCPanel — Table of Contents (layer list)
@@ -8,8 +12,9 @@ import { exportManager } from '../io/ExportManager.js';
 export class TOCPanel {
   constructor() {
     this._container = document.getElementById('layer-list');
+    this._bmContainer = document.getElementById('basemap-list');
     this._selectedLayerId = null;
-    this._dragSrc = null;
+    this._editingLayerId = null;
 
     bus.on(EVENTS.LAYER_ADDED, () => this.render());
     bus.on(EVENTS.LAYER_REMOVED, () => this.render());
@@ -17,8 +22,13 @@ export class TOCPanel {
     bus.on(EVENTS.LAYER_VISIBILITY, () => this.render());
     bus.on(EVENTS.LAYER_ORDER, () => this.render());
     bus.on(EVENTS.LAYER_STYLE_CHANGE, () => this.render());
-    bus.on(EVENTS.PROJECT_LOADED, () => this.render());
-    bus.on(EVENTS.PROJECT_NEW, () => this.render());
+    bus.on(EVENTS.PROJECT_LOADED, () => { this.render(); this.renderBasemaps(); });
+    bus.on(EVENTS.PROJECT_NEW, () => { this.render(); this.renderBasemaps(); });
+
+    bus.on(BM_EVENTS.ADDED, () => this.renderBasemaps());
+    bus.on(BM_EVENTS.REMOVED, () => this.renderBasemaps());
+    bus.on(BM_EVENTS.UPDATED, () => this.renderBasemaps());
+    bus.on(BM_EVENTS.ORDER, () => this.renderBasemaps());
   }
 
   render() {
@@ -42,29 +52,37 @@ export class TOCPanel {
   }
 
   _buildItem(layer) {
+    const isEditing = this._editingLayerId === layer.id;
+    const isVector = layer.type === 'vector' || layer.type === 'esri-feature';
+
     const item = document.createElement('div');
-    item.className = `layer-item${layer.visible ? '' : ' hidden-layer'}${this._selectedLayerId === layer.id ? ' selected' : ''}`;
+    item.className = `layer-item${layer.visible ? '' : ' hidden-layer'}${this._selectedLayerId === layer.id ? ' selected' : ''}${isEditing ? ' editing' : ''}`;
     item.dataset.layerId = layer.id;
-    item.draggable = true;
 
     const styleColor = this._getLayerColor(layer);
 
     item.innerHTML = `
       <div class="layer-header">
-        <span class="layer-drag-handle" title="Drag to reorder">⠿</span>
+        <div class="layer-order-btns">
+          <button class="layer-order-btn btn-move-up" title="Move up">▲</button>
+          <button class="layer-order-btn btn-move-down" title="Move down">▼</button>
+        </div>
         <button class="layer-visibility${layer.visible ? '' : ' hidden-layer'}" title="${layer.visible ? 'Hide layer' : 'Show layer'}">
           ${layer.visible ? eyeIcon() : eyeOffIcon()}
         </button>
         <div class="layer-type-icon ${typeIconClass(layer)}" title="${layer.type}">${typeIconSVG(layer)}</div>
         <span class="layer-name" title="${layer.name}">${layer.name}</span>
         <div class="layer-actions">
+          ${isVector ? `<button class="layer-action-btn btn-edit-toggle${isEditing ? ' active' : ''}" title="${isEditing ? 'Stop Editing' : 'Edit Layer'}">
+            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+          </button>` : ''}
           <button class="layer-action-btn btn-style" title="Symbology">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/></svg>
           </button>
           <button class="layer-action-btn btn-zoom" title="Zoom to layer">
             <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
           </button>
-          <button class="layer-action-btn btn-table" title="Attribute table" ${layer.type !== 'vector' && layer.type !== 'esri-feature' ? 'disabled' : ''}>
+          <button class="layer-action-btn btn-table" title="Attribute table" ${!isVector ? 'disabled' : ''}>
             <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
           </button>
           <button class="layer-action-btn btn-more" title="More options">
@@ -86,7 +104,7 @@ export class TOCPanel {
 
     // Select on click
     header.addEventListener('click', (e) => {
-      if (e.target.closest('button') || e.target.closest('.layer-drag-handle')) return;
+      if (e.target.closest('button') || e.target.closest('.layer-order-btns')) return;
       this._selectedLayerId = layer.id;
       this.render();
       bus.emit(EVENTS.LAYER_SELECTED, layer);
@@ -103,6 +121,27 @@ export class TOCPanel {
       layerManager.toggleVisibility(layer.id);
     });
 
+    // Move up
+    item.querySelector('.btn-move-up').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._moveLayerUp(layer.id);
+    });
+
+    // Move down
+    item.querySelector('.btn-move-down').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._moveLayerDown(layer.id);
+    });
+
+    // Edit toggle (vector layers only)
+    const editToggleBtn = item.querySelector('.btn-edit-toggle');
+    if (editToggleBtn) {
+      editToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._toggleEditing(layer);
+      });
+    }
+
     // Zoom to
     item.querySelector('.btn-zoom').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -117,7 +156,7 @@ export class TOCPanel {
 
     // Attribute table
     const tableBtn = item.querySelector('.btn-table');
-    if (!tableBtn.disabled) {
+    if (tableBtn && !tableBtn.disabled) {
       tableBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         bus.emit(EVENTS.SHOW_ATTR_TABLE, layer);
@@ -141,31 +180,154 @@ export class TOCPanel {
     // Wire inline symbology controls
     this._bindSymbologyPane(item, layer);
 
-    // Drag and drop reorder
-    item.addEventListener('dragstart', (e) => {
-      this._dragSrc = layer.id;
-      e.dataTransfer.effectAllowed = 'move';
-      item.classList.add('dragging');
-    });
-    item.addEventListener('dragend', () => {
-      item.classList.remove('dragging');
-      this._container.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    });
-    item.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      item.classList.add('drag-over');
-    });
-    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
-    item.addEventListener('drop', (e) => {
-      e.preventDefault();
-      item.classList.remove('drag-over');
-      if (this._dragSrc && this._dragSrc !== layer.id) {
-        this._reorderLayers(this._dragSrc, layer.id);
+    return item;
+  }
+
+  _toggleEditing(layer) {
+    if (this._editingLayerId === layer.id) {
+      editingManager.clearEditLayer();
+      this._editingLayerId = null;
+      bus.emit(EVENTS.SHOW_TOAST, { type: 'info', message: `Stopped editing: ${layer.name}` });
+    } else {
+      if (this._editingLayerId) {
+        editingManager.clearEditLayer();
       }
+      this._editingLayerId = layer.id;
+      editingManager.setEditLayer(layer.id, false);
+      bus.emit(EVENTS.SHOW_TOAST, { type: 'info', message: `Editing: ${layer.name}. Use draw tools to add features.` });
+    }
+    this.render();
+  }
+
+  _moveLayerUp(layerId) {
+    const layers = layerManager.layers;
+    const tocOrder = [...layers].reverse().map(l => l.id); // TOC display order (top first)
+    const idx = tocOrder.indexOf(layerId);
+    if (idx <= 0) return;
+    [tocOrder[idx - 1], tocOrder[idx]] = [tocOrder[idx], tocOrder[idx - 1]];
+    layerManager.reorderLayers([...tocOrder].reverse());
+  }
+
+  _moveLayerDown(layerId) {
+    const layers = layerManager.layers;
+    const tocOrder = [...layers].reverse().map(l => l.id);
+    const idx = tocOrder.indexOf(layerId);
+    if (idx < 0 || idx >= tocOrder.length - 1) return;
+    [tocOrder[idx], tocOrder[idx + 1]] = [tocOrder[idx + 1], tocOrder[idx]];
+    layerManager.reorderLayers([...tocOrder].reverse());
+  }
+
+  renderBasemaps() {
+    if (!this._bmContainer) return;
+    const stack = basemapLayerManager.stack;
+    if (!stack.length) {
+      this._bmContainer.innerHTML = '<div class="bm-empty">No basemaps. Click + to add one.</div>';
+      return;
+    }
+    this._bmContainer.innerHTML = '';
+    // Render in reverse order (top rendered = first shown in TOC)
+    const reversed = [...stack].reverse();
+    for (const entry of reversed) {
+      this._bmContainer.appendChild(this._buildBasemapItem(entry));
+    }
+  }
+
+  _buildBasemapItem(entry) {
+    const div = document.createElement('div');
+    div.className = `basemap-item${entry.visible ? '' : ' bm-hidden'}`;
+    div.dataset.bmUid = entry.uid;
+
+    const satDisplay = entry.saturation >= 0 ? `+${(entry.saturation * 100).toFixed(0)}%` : `${(entry.saturation * 100).toFixed(0)}%`;
+
+    div.innerHTML = `
+      <div class="bm-header">
+        <button class="bm-vis-btn${entry.visible ? '' : ' hidden'}" title="${entry.visible ? 'Hide basemap' : 'Show basemap'}">
+          ${entry.visible ? eyeIcon() : eyeOffIcon()}
+        </button>
+        <span class="bm-name">${entry.name}</span>
+        <div class="bm-order-btns">
+          <button class="bm-order-btn bm-up" title="Move up">▲</button>
+          <button class="bm-order-btn bm-down" title="Move down">▼</button>
+        </div>
+        <button class="bm-remove-btn" title="Remove basemap">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="bm-controls">
+        <label>Opacity</label>
+        <div class="bm-slider-row">
+          <input type="range" class="bm-opacity-slider" min="0" max="1" step="0.05" value="${entry.opacity}">
+          <span class="bm-op-val">${Math.round(entry.opacity * 100)}%</span>
+        </div>
+        <label>Saturation</label>
+        <div class="bm-slider-row">
+          <input type="range" class="bm-sat-slider" min="-1" max="1" step="0.05" value="${entry.saturation}">
+          <span class="bm-sat-val">${satDisplay}</span>
+        </div>
+      </div>
+    `;
+
+    // Visibility toggle
+    div.querySelector('.bm-vis-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      basemapLayerManager.toggleVisible(entry.uid);
     });
 
-    return item;
+    // Move up (in TOC = higher in stack)
+    div.querySelector('.bm-up').addEventListener('click', (e) => {
+      e.stopPropagation();
+      basemapLayerManager.moveUp(entry.uid);
+    });
+
+    // Move down
+    div.querySelector('.bm-down').addEventListener('click', (e) => {
+      e.stopPropagation();
+      basemapLayerManager.moveDown(entry.uid);
+    });
+
+    // Remove
+    div.querySelector('.bm-remove-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      basemapLayerManager.removeBasemap(entry.uid);
+    });
+
+    // Opacity slider
+    const opSlider = div.querySelector('.bm-opacity-slider');
+    const opVal = div.querySelector('.bm-op-val');
+    opSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      opVal.textContent = `${Math.round(val * 100)}%`;
+      basemapLayerManager.setOpacity(entry.uid, val);
+    });
+
+    // Saturation slider
+    const satSlider = div.querySelector('.bm-sat-slider');
+    const satVal = div.querySelector('.bm-sat-val');
+    satSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      satVal.textContent = val >= 0 ? `+${(val * 100).toFixed(0)}%` : `${(val * 100).toFixed(0)}%`;
+      basemapLayerManager.setSaturation(entry.uid, val);
+    });
+
+    return div;
+  }
+
+  showBasemapPicker() {
+    const content = document.createElement('div');
+    content.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+    const presets = Object.entries(BASEMAPS).filter(([id]) => id !== 'none');
+    for (const [id, bm] of presets) {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary';
+      btn.style.cssText = 'justify-content:flex-start;font-size:12px;padding:8px 10px;';
+      btn.textContent = bm.name;
+      btn.addEventListener('click', () => {
+        basemapLayerManager.addBasemap(id);
+        closeModal();
+      });
+      content.appendChild(btn);
+    }
+    openModal({ title: 'Add Basemap', content, width: 380 });
   }
 
   _buildSymbologyPane(layer) {
@@ -310,19 +472,6 @@ export class TOCPanel {
         bus.emit(EVENTS.SHOW_SYMBOLOGY, layer);
       });
     }
-  }
-
-  _reorderLayers(draggedId, targetId) {
-    const layers = layerManager.layers;
-    // TOC order is reversed from internal order
-    const tocOrder = [...layers].reverse().map(l => l.id);
-    const dragIdx = tocOrder.indexOf(draggedId);
-    const targetIdx = tocOrder.indexOf(targetId);
-    if (dragIdx < 0 || targetIdx < 0) return;
-    tocOrder.splice(dragIdx, 1);
-    tocOrder.splice(targetIdx, 0, draggedId);
-    // Reverse back to internal order
-    layerManager.reorderLayers(tocOrder.reverse());
   }
 
   _showContextMenu(layer, e) {

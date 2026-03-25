@@ -1,6 +1,7 @@
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { layerManager } from '../layers/LayerManager.js';
 import { mapManager } from '../map/MapManager.js';
+import { basemapLayerManager } from '../map/BasemapLayerManager.js';
 import { storage } from '../storage/StorageManager.js';
 import { uid } from '../utils/uid.js';
 
@@ -76,6 +77,7 @@ export class ProjectManager {
     this._currentProject.modified = new Date().toISOString();
     this._currentProject.mapState = mapManager.getState();
     this._currentProject.basemap = mapManager.getCurrentBasemap();
+    this._currentProject.basemapStack = basemapLayerManager.serialize();
 
     // Serialize layers (without embedded data — data stored separately in IndexedDB)
     this._currentProject.layers = layerManager.serialize(false);
@@ -94,6 +96,7 @@ export class ProjectManager {
     this._currentProject.modified = new Date().toISOString();
     this._currentProject.mapState = mapManager.getState();
     this._currentProject.basemap = mapManager.getCurrentBasemap();
+    this._currentProject.basemapStack = basemapLayerManager.serialize();
     this._currentProject.layers = layerManager.serialize(true); // embed small data
 
     const json = JSON.stringify(this._currentProject, null, 2);
@@ -144,11 +147,12 @@ export class ProjectManager {
       if (project.mapState.pitch !== undefined) mapManager.map.setPitch(project.mapState.pitch);
     }
 
-    // Restore basemap
-    if (project.basemap) {
-      mapManager.setBasemap(project.basemap);
-      const sel = document.getElementById('basemap-select');
-      if (sel) sel.value = project.basemap;
+    // Restore basemap stack
+    if (project.basemapStack?.length) {
+      basemapLayerManager.restore(project.basemapStack);
+    } else if (project.basemap && project.basemap !== 'none') {
+      // Legacy single basemap
+      basemapLayerManager.restore([{ presetId: project.basemap, opacity: 1, saturation: 0, visible: true }]);
     }
 
     // Restore layers
