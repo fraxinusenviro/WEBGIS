@@ -1,7 +1,6 @@
 import { bus, EVENTS } from '../utils/EventBus.js';
-import { layerManager } from '../layers/LayerManager.js';
+import { layerManager, POINT_SHAPES } from '../layers/LayerManager.js';
 import { openModal, closeModal } from './Modal.js';
-import * as turf from '@turf/turf';
 
 // Preset color ramps for graduated classification
 const COLOR_RAMPS = {
@@ -12,22 +11,59 @@ const COLOR_RAMPS = {
   qualitative:      ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf'],
 };
 
+/** SVG preview paths for point shape selector */
+const SHAPE_SVGS = {
+  circle:   `<circle cx="12" cy="12" r="7"/>`,
+  square:   `<rect x="5" y="5" width="14" height="14"/>`,
+  triangle: `<polygon points="12,4 21,20 3,20"/>`,
+  diamond:  `<polygon points="12,3 21,12 12,21 3,12"/>`,
+  cross:    `<path d="M12 4v16M4 12h16" stroke-width="3.5"/>`,
+  x:        `<path d="M5 5l14 14M19 5L5 19" stroke-width="3.5"/>`,
+  octagon:  `<polygon points="8,4 16,4 20,8 20,16 16,20 8,20 4,16 4,8"/>`,
+  star:     `<polygon points="12,2 15,9 22,9 16,14 18,21 12,17 6,21 8,14 2,9 9,9"/>`,
+  pentagon: `<polygon points="12,3 21,9 17,20 7,20 3,9"/>`,
+};
+
 export class SymbologyPanel {
   constructor() {
-    bus.on(EVENTS.SHOW_SYMBOLOGY, (layer) => this.open(layer));
+    this._dockedLayer = null;  // layer shown in the docked panel
+    bus.on(EVENTS.SHOW_SYMBOLOGY, (layer) => this._handleShowSymbology(layer));
   }
 
-  open(layer) {
+  /** Called when SHOW_SYMBOLOGY event fires — open in RightPanel if available, else modal */
+  _handleShowSymbology(layer) {
+    // Prefer docked right panel
+    const rightPanel = window._rightPanel;
+    if (rightPanel) {
+      rightPanel.showSymbology(layer);
+    } else {
+      this.openModal(layer);
+    }
+  }
+
+  /** Open as a floating modal (fallback) */
+  openModal(layer) {
     const content = document.createElement('div');
     content.innerHTML = this._buildContent(layer);
 
     const modal = openModal({
       title: `Symbology — ${layer.name}`,
       content,
-      width: 440,
+      width: 460,
     });
 
-    this._bindEvents(modal, layer);
+    this._bindEvents(modal, layer, () => closeModal());
+  }
+
+  /**
+   * Render symbology controls into a given container element.
+   * Used by RightPanel to render into the docked pane.
+   * @param {HTMLElement} container
+   * @param {Object} layer
+   */
+  renderInto(container, layer) {
+    container.innerHTML = this._buildContent(layer);
+    this._bindEvents(container, layer, null);
   }
 
   _buildContent(layer) {
@@ -38,27 +74,63 @@ export class SymbologyPanel {
 
     if (isRaster) {
       return `
-        <div class="form-group">
-          <label class="form-label">Layer Opacity</label>
-          <div style="display:flex;align-items:center;gap:10px">
-            <input type="range" id="sym-opacity" min="0" max="1" step="0.05" value="${layer.opacity}" style="flex:1">
-            <span id="sym-opacity-val">${Math.round(layer.opacity * 100)}%</span>
+        <div class="sym-section">
+          <div class="form-group">
+            <label class="form-label">Layer Opacity</label>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="range" id="sym-opacity" min="0" max="1" step="0.05" value="${layer.opacity}" style="flex:1">
+              <span id="sym-opacity-val">${Math.round(layer.opacity * 100)}%</span>
+            </div>
           </div>
+        </div>
+        <div class="sym-footer">
+          <button class="btn btn-primary" id="sym-apply">Apply</button>
         </div>`;
     }
 
     const fields = layerManager.getFields(layer.id);
     const fieldOptions = fields.map(f => `<option value="${f}" ${s.classificationField === f ? 'selected' : ''}>${f}</option>`).join('');
+    const labelFieldOptions = fields.map(f => `<option value="${f}" ${s.labelField === f ? 'selected' : ''}>${f}</option>`).join('');
 
     return `
-      <div class="tabs">
+      <div class="tabs sym-tabs">
         <div class="tab active" data-tab="style">Style</div>
         <div class="tab" data-tab="labels">Labels</div>
         <div class="tab" data-tab="classification">Classification</div>
       </div>
 
       <!-- STYLE TAB -->
-      <div id="tab-style" class="tab-content">
+      <div id="tab-style" class="tab-content sym-section">
+        ${gt === 'Point' ? `
+        <div class="form-group">
+          <label class="form-label">Symbol Shape</label>
+          <div class="symbol-shape-grid" id="sym-shape-grid">
+            ${POINT_SHAPES.map(sh => `
+              <button class="symbol-shape-btn${(s.pointShape || 'circle') === sh ? ' active' : ''}"
+                      data-shape="${sh}" title="${sh}">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5">
+                  ${SHAPE_SVGS[sh] || SHAPE_SVGS.circle}
+                </svg>
+                <span>${sh}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Point Color</label>
+          <div class="color-input-wrap">
+            <input type="color" id="sym-point-color" value="${s.pointColor || '#60a5fa'}">
+            <input type="text" class="form-input" id="sym-point-color-hex" value="${s.pointColor || '#60a5fa'}">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Point Size</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sym-point-radius" min="2" max="30" step="1" value="${s.pointRadius || 6}" style="flex:1">
+            <span id="sym-point-radius-val">${s.pointRadius || 6}px</span>
+          </div>
+        </div>
+        ` : ''}
         ${gt === 'Polygon' ? `
         <div class="form-group">
           <label class="form-label">Fill Color</label>
@@ -72,22 +144,6 @@ export class SymbologyPanel {
           <div style="display:flex;align-items:center;gap:10px">
             <input type="range" id="sym-fill-opacity" min="0" max="1" step="0.05" value="${s.fillOpacity ?? 0.35}" style="flex:1">
             <span id="sym-fill-opacity-val">${Math.round((s.fillOpacity ?? 0.35) * 100)}%</span>
-          </div>
-        </div>
-        ` : ''}
-        ${gt === 'Point' ? `
-        <div class="form-group">
-          <label class="form-label">Point Color</label>
-          <div class="color-input-wrap">
-            <input type="color" id="sym-point-color" value="${s.pointColor || '#60a5fa'}">
-            <input type="text" class="form-input" id="sym-point-color-hex" value="${s.pointColor || '#60a5fa'}">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Point Size</label>
-          <div style="display:flex;align-items:center;gap:10px">
-            <input type="range" id="sym-point-radius" min="2" max="30" step="1" value="${s.pointRadius || 6}" style="flex:1">
-            <span id="sym-point-radius-val">${s.pointRadius || 6}px</span>
           </div>
         </div>
         ` : ''}
@@ -116,6 +172,7 @@ export class SymbologyPanel {
           </select>
         </div>
         ` : ''}
+        ${gt !== 'LineString' ? `
         <div class="form-group">
           <label class="form-label">Stroke Color</label>
           <div class="color-input-wrap">
@@ -130,6 +187,7 @@ export class SymbologyPanel {
             <span id="sym-stroke-width-val">${s.strokeWidth ?? 1.5}px</span>
           </div>
         </div>
+        ` : ''}
         <div class="form-group">
           <label class="form-label">Layer Opacity</label>
           <div style="display:flex;align-items:center;gap:10px">
@@ -140,18 +198,20 @@ export class SymbologyPanel {
       </div>
 
       <!-- LABELS TAB -->
-      <div id="tab-labels" class="tab-content" style="display:none">
+      <div id="tab-labels" class="tab-content sym-section" style="display:none">
         <div class="form-group">
           <label class="form-label">Label Field</label>
           <select class="form-select" id="sym-label-field">
             <option value="">— No Labels —</option>
-            ${fieldOptions}
+            ${labelFieldOptions}
           </select>
         </div>
         <div class="form-group">
           <label class="form-label">Label Size</label>
-          <input type="range" id="sym-label-size" min="8" max="32" step="1" value="${s.labelSize || 12}" style="width:100%">
-          <span id="sym-label-size-val">${s.labelSize || 12}px</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="range" id="sym-label-size" min="8" max="32" step="1" value="${s.labelSize || 12}" style="flex:1">
+            <span id="sym-label-size-val">${s.labelSize || 12}px</span>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Label Color</label>
@@ -167,14 +227,17 @@ export class SymbologyPanel {
             <input type="text" class="form-input" id="sym-halo-color-hex" value="${s.labelHaloColor || '#0d1a10'}">
           </div>
         </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          Tip: Click Apply to see labels on the map.
+        </p>
       </div>
 
       <!-- CLASSIFICATION TAB -->
-      <div id="tab-classification" class="tab-content" style="display:none">
+      <div id="tab-classification" class="tab-content sym-section" style="display:none">
         <div class="form-group">
           <label class="form-label">Classification Type</label>
           <select class="form-select" id="sym-class-type">
-            <option value="single" ${s.type === 'single' ? 'selected' : ''}>Single Symbol</option>
+            <option value="single" ${(s.type || 'single') === 'single' ? 'selected' : ''}>Single Symbol</option>
             <option value="graduated" ${s.type === 'graduated' ? 'selected' : ''}>Graduated Colors</option>
             <option value="categorized" ${s.type === 'categorized' ? 'selected' : ''}>Categorized</option>
           </select>
@@ -209,24 +272,39 @@ export class SymbologyPanel {
         </div>
       </div>
 
-      <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+      <div class="sym-footer">
         <button class="btn btn-ghost" id="sym-cancel">Cancel</button>
         <button class="btn btn-primary" id="sym-apply">Apply</button>
       </div>
     `;
   }
 
-  _bindEvents(modal, layer) {
+  _bindEvents(container, layer, onClose) {
     const s = { ...layer.style };
-    const state = { selectedRamp: 'sequential_green', classes: s.classes || [] };
+    const state = {
+      selectedRamp: 'sequential_green',
+      classes: s.classes || [],
+      selectedShape: s.pointShape || 'circle',
+    };
 
     // Tab switching
-    modal.querySelectorAll('.tab').forEach(tab => {
+    container.querySelectorAll('.tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        modal.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        modal.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+        container.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        container.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
         tab.classList.add('active');
-        modal.querySelector(`#tab-${tab.dataset.tab}`).style.display = 'block';
+        container.querySelector(`#tab-${tab.dataset.tab}`)?.style && (
+          container.querySelector(`#tab-${tab.dataset.tab}`).style.display = 'block'
+        );
+      });
+    });
+
+    // Shape selector
+    container.querySelectorAll('.symbol-shape-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.querySelectorAll('.symbol-shape-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.selectedShape = btn.dataset.shape;
       });
     });
 
@@ -239,8 +317,8 @@ export class SymbologyPanel {
       ['sym-label-color', 'sym-label-color-hex'],
       ['sym-halo-color', 'sym-halo-color-hex'],
     ].forEach(([picker, text]) => {
-      const p = modal.querySelector(`#${picker}`);
-      const t = modal.querySelector(`#${text}`);
+      const p = container.querySelector(`#${picker}`);
+      const t = container.querySelector(`#${text}`);
       if (!p || !t) return;
       p.addEventListener('input', () => { t.value = p.value; });
       t.addEventListener('input', () => {
@@ -257,15 +335,15 @@ export class SymbologyPanel {
       ['sym-opacity', 'sym-opacity-val', v => `${Math.round(v * 100)}%`],
       ['sym-label-size', 'sym-label-size-val', v => `${v}px`],
     ].forEach(([rangeId, valId, fmt]) => {
-      const range = modal.querySelector(`#${rangeId}`);
-      const valEl = modal.querySelector(`#${valId}`);
+      const range = container.querySelector(`#${rangeId}`);
+      const valEl = container.querySelector(`#${valId}`);
       if (!range || !valEl) return;
       range.addEventListener('input', () => { valEl.textContent = fmt(parseFloat(range.value)); });
     });
 
     // Classification type change
-    const classType = modal.querySelector('#sym-class-type');
-    const classOpts = modal.querySelector('#sym-class-opts');
+    const classType = container.querySelector('#sym-class-type');
+    const classOpts = container.querySelector('#sym-class-opts');
     if (classType && classOpts) {
       classType.addEventListener('change', () => {
         classOpts.classList.toggle('hidden', classType.value === 'single');
@@ -273,43 +351,47 @@ export class SymbologyPanel {
     }
 
     // Color ramp selection
-    modal.querySelectorAll('.ramp-option').forEach(opt => {
+    container.querySelectorAll('.ramp-option').forEach(opt => {
       opt.addEventListener('click', () => {
-        modal.querySelectorAll('.ramp-option').forEach(o => o.style.borderColor = 'transparent');
+        container.querySelectorAll('.ramp-option').forEach(o => o.style.borderColor = 'transparent');
         opt.style.borderColor = 'var(--accent)';
         state.selectedRamp = opt.dataset.ramp;
       });
     });
 
     // Generate classes
-    const classifyBtn = modal.querySelector('#sym-classify-btn');
+    const classifyBtn = container.querySelector('#sym-classify-btn');
     if (classifyBtn) {
       classifyBtn.addEventListener('click', () => {
-        const field = modal.querySelector('#sym-class-field')?.value;
-        const count = parseInt(modal.querySelector('#sym-class-count')?.value || 5);
+        const field = container.querySelector('#sym-class-field')?.value;
+        const count = parseInt(container.querySelector('#sym-class-count')?.value || 5);
         const type = classType?.value;
         if (!field) return;
         state.classes = this._generateClasses(layer, field, count, type, state.selectedRamp);
-        this._renderClassPreview(modal, state.classes);
+        this._renderClassPreview(container, state.classes);
       });
     }
 
     // Apply
-    modal.querySelector('#sym-apply')?.addEventListener('click', () => {
-      const newStyle = this._collectStyle(modal, layer, state);
+    container.querySelector('#sym-apply')?.addEventListener('click', () => {
+      const newStyle = this._collectStyle(container, layer, state);
       layerManager.updateStyle(layer.id, newStyle);
-      if (modal.querySelector('#sym-opacity')) {
-        layerManager.updateLayer(layer.id, { opacity: parseFloat(modal.querySelector('#sym-opacity').value) });
+      const opacityEl = container.querySelector('#sym-opacity');
+      if (opacityEl) {
+        layerManager.updateLayer(layer.id, { opacity: parseFloat(opacityEl.value) });
       }
-      closeModal();
+      if (onClose) onClose();
+      else bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'Symbology applied' });
     });
 
     // Cancel
-    modal.querySelector('#sym-cancel')?.addEventListener('click', () => closeModal());
+    container.querySelector('#sym-cancel')?.addEventListener('click', () => {
+      if (onClose) onClose();
+    });
   }
 
-  _collectStyle(modal, layer, state) {
-    const g = (id) => modal.querySelector(`#${id}`)?.value;
+  _collectStyle(container, layer, state) {
+    const g = (id) => container.querySelector(`#${id}`)?.value;
     const gf = (id) => parseFloat(g(id) || 0);
     const gt = layer.geometryType;
     const classType = g('sym-class-type') || 'single';
@@ -338,6 +420,7 @@ export class SymbologyPanel {
     } else {
       style.pointColor = g('sym-point-color') || '#60a5fa';
       style.pointRadius = gf('sym-point-radius') || 6;
+      style.pointShape = state.selectedShape || 'circle';
       style.pointOpacity = 0.85;
     }
 
@@ -370,7 +453,6 @@ export class SymbologyPanel {
     const min = nums[0];
     const max = nums[nums.length - 1];
     const step = (max - min) / count;
-
     const interpolatedColors = interpolateColors(ramp, count);
 
     return Array.from({ length: count }, (_, i) => ({
@@ -381,14 +463,13 @@ export class SymbologyPanel {
     }));
   }
 
-  _renderClassPreview(modal, classes) {
-    const preview = modal.querySelector('#sym-class-preview');
+  _renderClassPreview(container, classes) {
+    const preview = container.querySelector('#sym-class-preview');
     if (!preview) return;
     preview.innerHTML = classes.map(cls => `
       <div class="class-row">
         <div class="class-swatch" style="background:${cls.color}"></div>
         <span class="class-label">${cls.label || cls.value || ''}</span>
-        <span class="class-count">${cls.min !== undefined ? `${cls.min?.toFixed(1)}` : ''}</span>
       </div>
     `).join('');
   }

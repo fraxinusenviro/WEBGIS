@@ -18,72 +18,66 @@ import { ServiceDialog } from './ui/ServiceDialog.js';
 import { AttributeTable } from './ui/AttributeTable.js';
 import { IdentifyPanel } from './ui/IdentifyPanel.js';
 import { dataCatalog } from './ui/DataCatalog.js';
+import { RightPanel } from './ui/RightPanel.js';
+import { feltManager } from './felt/FeltManager.js';
 import { zoomToScale } from './utils/coordinates.js';
 
 /**
  * App — main orchestrator
- * Wires together all managers, sets up UI event handlers
  */
 export class App {
   constructor() {
     this._activeTool = 'select';
     this._tocPanel = null;
     this._symbologyPanel = null;
+    this._rightPanel = null;
     this._gpPanel = null;
     this._serviceDialog = null;
     this._attrTable = null;
     this._identifyPanel = null;
-    this._dataCatalog = null;
   }
 
   async init() {
-    // Initialize toast first so errors can show
     initToast();
 
-    // Init map
-    mapManager.init('map', { basemap: 'osm', center: [0, 20], zoom: 3 });
+    // Init map (center = Nova Scotia by default)
+    mapManager.init('map', {});
 
-    // Wait for map ready then wire everything up
     bus.on(EVENTS.MAP_READY, () => this._onMapReady());
 
     // Init UI panels
-    this._tocPanel = new TOCPanel();
     this._symbologyPanel = new SymbologyPanel();
+    this._tocPanel = new TOCPanel();
     this._gpPanel = new GeoprocessingPanel();
     this._serviceDialog = new ServiceDialog();
     this._attrTable = new AttributeTable();
     this._identifyPanel = new IdentifyPanel();
-    this._dataCatalog = dataCatalog;
+
+    // Init tabbed right panel (Catalog + Symbology)
+    this._rightPanel = new RightPanel(dataCatalog, this._symbologyPanel);
+
+    // Wire up TOC internal resize handle (60/40 split)
+    this._bindTOCInternalResize();
 
     // Wire toolbar buttons
     this._bindToolbar();
-
-    // Wire map tool buttons
     this._bindMapTools();
-
-    // Wire map controls
     this._bindMapControls();
-
-    // Wire file inputs
     this._bindFileInputs();
-
-    // Wire drag-and-drop
     this._bindDragDrop();
-
-    // Wire panel resize handle
     this._bindResizeHandle();
 
-    // Wire TOC add layer button
+    // TOC add layer button
     document.getElementById('btn-toc-add-layer')?.addEventListener('click', () => {
       document.getElementById('file-input-data')?.click();
     });
 
-    // Wire TOC collapse
+    // TOC collapse
     document.getElementById('btn-toc-collapse')?.addEventListener('click', () => {
       document.querySelectorAll('.layer-expand.open').forEach(el => el.classList.remove('open'));
     });
 
-    // Wire zoom all
+    // Zoom all
     document.getElementById('btn-zoom-all')?.addEventListener('click', () => {
       const layers = layerManager.layers;
       if (!layers.length) return;
@@ -97,32 +91,43 @@ export class App {
       if (isFinite(minX)) mapManager.zoomToExtent([[minX, minY], [maxX, maxY]]);
     });
 
-    // Keyboard shortcuts
     this._bindKeyboard();
-
-    // Start auto-save
     projectManager.startAutoSave(60000);
   }
 
   _onMapReady() {
-    // Show initial coordinates
     const map = mapManager.map;
     const center = map.getCenter();
     const z = map.getZoom();
     document.getElementById('zoom-display').textContent = `Zoom: ${z.toFixed(2)}`;
     document.getElementById('scale-display').textContent = `1:${zoomToScale(z, center.lat).toLocaleString()}`;
 
-    // Try restore last session
     projectManager.tryRestoreSession();
-
-    // Set default tool
     this._setActiveTool('select');
 
-    // Add default OSM basemap
-    basemapLayerManager.addBasemap('osm');
+    // Default basemap stack for Nova Scotia fieldwork
+    // Stack order (bottom→top rendered): OSM, HRDEM DTM HS, HRDEM DSM HS, ESRI Imagery, ESRI Imagery Hybrid, HRDEM DTM HS 40%
+    // Active: ESRI Imagery Hybrid (active), HRDEM DTM Hillshade 40% (active)
+    const defaultStack = [
+      { presetId: 'osm',                  opacity: 1.0,  visible: false },
+      { presetId: 'hrdem-dtm-hillshade',  opacity: 1.0,  visible: false },
+      { presetId: 'hrdem-dsm-hillshade',  opacity: 1.0,  visible: false },
+      { presetId: 'satellite',            opacity: 1.0,  visible: false },
+      { presetId: 'esri-imagery-hybrid',  opacity: 1.0,  visible: true  },
+      { presetId: 'hrdem-dtm-hillshade',  opacity: 0.4,  visible: true  },
+    ];
+
+    for (const item of defaultStack) {
+      basemapLayerManager.addBasemap(item.presetId, {
+        opacity: item.opacity,
+        visible: item.visible,
+        saturation: 0,
+      });
+    }
   }
 
-  // ---- Toolbar ----
+  // ── Toolbar ──────────────────────────────────────────────────────────────
+
   _bindToolbar() {
     document.getElementById('btn-new-project')?.addEventListener('click', () => {
       projectManager.newProject();
@@ -133,7 +138,6 @@ export class App {
     });
 
     document.getElementById('btn-save-project')?.addEventListener('click', () => {
-      // If shift held, save to file instead
       projectManager.saveToFile();
     });
 
@@ -155,11 +159,11 @@ export class App {
     });
 
     document.getElementById('btn-data-catalog')?.addEventListener('click', () => {
-      this._dataCatalog.open();
+      this._rightPanel.switchTab('catalog');
+      this._rightPanel._expand();
     });
 
     document.getElementById('btn-attribute-table')?.addEventListener('click', () => {
-      // Open for first vector layer or prompt selection
       const layers = layerManager.layers.filter(l => l.type === 'vector' || l.type === 'esri-feature');
       if (layers.length === 1) {
         bus.emit(EVENTS.SHOW_ATTR_TABLE, layers[0]);
@@ -174,9 +178,13 @@ export class App {
       this._tocPanel.showBasemapPicker();
     });
 
-    // Settings button — for now shows storage info
     document.getElementById('btn-settings')?.addEventListener('click', () => {
       this._showSettings();
+    });
+
+    // Felt upload button
+    document.getElementById('btn-felt-upload')?.addEventListener('click', () => {
+      this._showFeltUploadDialog();
     });
   }
 
@@ -216,14 +224,40 @@ export class App {
         <label class="form-label">Project Name</label>
         <input type="text" class="form-input" id="settings-proj-name" value="${projectManager.currentProject.name}">
       </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
+      <div class="section-title" style="margin-top:16px">Felt Integration</div>
+      <div class="form-group">
+        <label class="form-label">Felt API Key</label>
+        <input type="password" class="form-input" id="settings-felt-key"
+               placeholder="felt_pat_xxxx..." value="${feltManager.getApiKey()}"
+               autocomplete="off">
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          Get your API key at <strong>felt.com → Settings → API</strong>
+        </p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Default Felt Map ID</label>
+        <input type="text" class="form-input" id="settings-felt-map"
+               placeholder="AbCdEf123..." value="${feltManager.getMapId()}">
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          Found in the Felt map URL: felt.com/map/<strong>MAP_ID</strong>
+        </p>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-danger" id="settings-clear-storage">Clear All Stored Data</button>
       </div>
     `;
-    openModal({ title: 'Settings', content, width: 380 });
+    openModal({ title: 'Settings', content, width: 420 });
 
     content.querySelector('#settings-proj-name')?.addEventListener('change', (e) => {
       projectManager.setName(e.target.value);
+    });
+
+    content.querySelector('#settings-felt-key')?.addEventListener('change', (e) => {
+      feltManager.setApiKey(e.target.value);
+    });
+
+    content.querySelector('#settings-felt-map')?.addEventListener('change', (e) => {
+      feltManager.setMapId(e.target.value);
     });
 
     content.querySelector('#settings-clear-storage')?.addEventListener('click', async () => {
@@ -234,28 +268,87 @@ export class App {
     });
   }
 
-  // ---- Map tool buttons ----
+  _showFeltUploadDialog() {
+    const vectorLayers = layerManager.layers.filter(
+      l => l.type === 'vector' || l.type === 'esri-feature'
+    );
+
+    if (!feltManager.getApiKey() || !feltManager.getMapId()) {
+      bus.emit(EVENTS.SHOW_TOAST, {
+        type: 'warning',
+        message: 'Configure your Felt API Key and Map ID in Settings first.',
+      });
+      this._showSettings();
+      return;
+    }
+
+    if (!vectorLayers.length) {
+      bus.emit(EVENTS.SHOW_TOAST, { type: 'warning', message: 'No vector layers to upload.' });
+      return;
+    }
+
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+        Select a layer to upload to your Felt map.
+        Symbology will be converted to Felt Style Language (FSL) and applied automatically.
+      </p>
+      ${vectorLayers.map(l => `
+        <button class="btn btn-secondary w-full" data-id="${l.id}"
+                style="margin-bottom:6px;justify-content:flex-start;gap:8px">
+          <span style="font-size:11px;opacity:0.6">${geomEmoji(l.geometryType)}</span>
+          <span>${l.name}</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:auto">
+            ${l.data?.features?.length || 0} features
+          </span>
+        </button>
+      `).join('')}
+      <div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--border)">
+        <p style="font-size:11px;color:var(--text-muted)">
+          Uploading to map: <strong>${feltManager.getMapId()}</strong>
+          &nbsp;•&nbsp;
+          <a href="#" id="felt-open-map" style="color:var(--accent)">Open in Felt ↗</a>
+        </p>
+      </div>
+    `;
+
+    openModal({ title: 'Upload to Felt', content, width: 400 });
+
+    content.querySelector('#felt-open-map')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      feltManager.openMap();
+    });
+
+    content.querySelectorAll('button[data-id]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const layerId = btn.dataset.id;
+        closeModal();
+        try {
+          await feltManager.uploadLayer(layerId);
+        } catch (err) {
+          bus.emit(EVENTS.SHOW_TOAST, { type: 'error', message: `Felt upload failed: ${err.message}` });
+          console.error('Felt upload error:', err);
+        }
+      });
+    });
+  }
+
+  // ── Map tool buttons ──────────────────────────────────────────────────────
+
   _bindMapTools() {
     document.querySelectorAll('.map-tool-btn[data-tool]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const tool = btn.dataset.tool;
-        this._setActiveTool(tool);
+        this._setActiveTool(btn.dataset.tool);
       });
     });
   }
 
   _setActiveTool(tool) {
     this._activeTool = tool;
-
-    // Update button states
     document.querySelectorAll('.map-tool-btn[data-tool]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tool === tool);
     });
-
-    // Disable identify mode
     editingManager.disableIdentify();
-
-    // Set cursor
     const mapCanvas = document.querySelector('#map canvas');
     if (mapCanvas) mapCanvas.style.cursor = '';
 
@@ -287,10 +380,9 @@ export class App {
     }
   }
 
-  // ---- Map control buttons ----
-  _bindMapControls() {
-    const map = mapManager.map;
+  // ── Map control buttons ────────────────────────────────────────────────────
 
+  _bindMapControls() {
     document.getElementById('ctrl-zoom-in')?.addEventListener('click', () => {
       mapManager.map?.zoomIn();
     });
@@ -299,8 +391,9 @@ export class App {
       mapManager.map?.zoomOut();
     });
 
+    // Home = Nova Scotia
     document.getElementById('ctrl-home')?.addEventListener('click', () => {
-      mapManager.map?.flyTo({ center: [0, 20], zoom: 3 });
+      mapManager.flyHome();
     });
 
     document.getElementById('ctrl-location')?.addEventListener('click', () => {
@@ -326,7 +419,8 @@ export class App {
     });
   }
 
-  // ---- File inputs ----
+  // ── File inputs ───────────────────────────────────────────────────────────
+
   _bindFileInputs() {
     document.getElementById('file-input-data')?.addEventListener('change', async (e) => {
       const files = Array.from(e.target.files);
@@ -347,7 +441,8 @@ export class App {
     });
   }
 
-  // ---- Drag and drop ----
+  // ── Drag and drop ─────────────────────────────────────────────────────────
+
   _bindDragDrop() {
     const overlay = document.createElement('div');
     overlay.className = 'drop-overlay';
@@ -373,9 +468,8 @@ export class App {
       overlay.classList.remove('active');
       const files = Array.from(e.dataTransfer.files);
       if (!files.length) return;
-      // Check if any file is a project/package
       const projectFiles = files.filter(f => /\.(json|mapkg)$/.test(f.name));
-      const dataFiles = files.filter(f => !/\.(json|mapkg)$/.test(f.name));
+      const dataFiles    = files.filter(f => !/\.(json|mapkg)$/.test(f.name));
       for (const f of projectFiles) {
         if (f.name.endsWith('.mapkg')) await packageManager.importPackage(f);
         else await projectManager.loadFromFile(f);
@@ -384,14 +478,14 @@ export class App {
     });
   }
 
-  // ---- Resize handle (TOC panel) ----
+  // ── TOC panel horizontal resize ───────────────────────────────────────────
+
   _bindResizeHandle() {
     const handle = document.getElementById('toc-resize-handle');
     const toc = document.getElementById('toc-panel');
     if (!handle || !toc) return;
 
-    let dragging = false;
-    let startX, startW;
+    let dragging = false, startX, startW;
 
     handle.addEventListener('mousedown', (e) => {
       dragging = true;
@@ -404,7 +498,7 @@ export class App {
 
     document.addEventListener('mousemove', (e) => {
       if (!dragging) return;
-      const newW = Math.max(160, Math.min(600, startW + e.clientX - startX));
+      const newW = Math.max(180, Math.min(600, startW + e.clientX - startX));
       toc.style.width = `${newW}px`;
     });
 
@@ -417,30 +511,59 @@ export class App {
     });
   }
 
-  // ---- Keyboard shortcuts ----
+  // ── TOC internal split resize (layers 60% / basemaps 40%) ────────────────
+
+  _bindTOCInternalResize() {
+    const handle = document.getElementById('toc-split-handle');
+    const layerSection = document.getElementById('layer-section');
+    const basemapSection = document.getElementById('basemap-section');
+    if (!handle || !layerSection || !basemapSection) return;
+
+    let dragging = false, startY, startH;
+
+    handle.addEventListener('mousedown', (e) => {
+      dragging = true;
+      startY = e.clientY;
+      startH = layerSection.offsetHeight;
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'row-resize';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const tocH = document.getElementById('toc-panel').offsetHeight
+                 - document.querySelector('.panel-header').offsetHeight
+                 - document.querySelector('.panel-footer').offsetHeight
+                 - handle.offsetHeight;
+      const newH = Math.max(60, Math.min(tocH - 60, startH + e.clientY - startY));
+      layerSection.style.flex = 'none';
+      layerSection.style.height = `${newH}px`;
+      basemapSection.style.flex = '1';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    });
+  }
+
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+
   _bindKeyboard() {
     document.addEventListener('keydown', (e) => {
-      // Skip if in an input
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-
       const ctrl = e.ctrlKey || e.metaKey;
-
-      if (ctrl && e.key === 's') {
-        e.preventDefault();
-        projectManager.saveToFile();
-      } else if (ctrl && e.key === 'o') {
-        e.preventDefault();
-        document.getElementById('file-input-project')?.click();
-      } else if (ctrl && e.key === 'n') {
-        e.preventDefault();
-        projectManager.newProject();
-      } else if (e.key === 'Escape') {
-        // Return to select tool
+      if (ctrl && e.key === 's') { e.preventDefault(); projectManager.saveToFile(); }
+      else if (ctrl && e.key === 'o') { e.preventDefault(); document.getElementById('file-input-project')?.click(); }
+      else if (ctrl && e.key === 'n') { e.preventDefault(); projectManager.newProject(); }
+      else if (e.key === 'Escape') {
         this._setActiveTool('select');
         editingManager.stopMeasure?.();
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        editingManager.deleteSelected();
-      } else if (e.key === '1') this._setActiveTool('select');
+      }
+      else if (e.key === 'Delete' || e.key === 'Backspace') editingManager.deleteSelected();
+      else if (e.key === '1') this._setActiveTool('select');
       else if (e.key === '2') this._setActiveTool('draw_point');
       else if (e.key === '3') this._setActiveTool('draw_line_string');
       else if (e.key === '4') this._setActiveTool('draw_polygon');
@@ -448,6 +571,12 @@ export class App {
       else if (e.key === 'm') this._setActiveTool('measure');
     });
   }
+}
+
+function geomEmoji(geomType) {
+  if (geomType === 'Polygon') return '▬';
+  if (geomType === 'LineString') return '╱';
+  return '●';
 }
 
 export const app = new App();
