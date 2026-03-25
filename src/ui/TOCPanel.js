@@ -242,7 +242,7 @@ export class TOCPanel {
 
     div.innerHTML = `
       <div class="bm-header">
-        <button class="bm-vis-btn${entry.visible ? '' : ' hidden'}" title="${entry.visible ? 'Hide basemap' : 'Show basemap'}">
+        <button class="bm-vis-btn${entry.visible ? '' : ' bm-off'}" title="${entry.visible ? 'Hide basemap' : 'Show basemap'}">
           ${entry.visible ? eyeIcon() : eyeOffIcon()}
         </button>
         <span class="bm-name">${entry.name}</span>
