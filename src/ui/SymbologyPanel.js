@@ -25,13 +25,11 @@ const SHAPE_SVGS = {
 
 export class SymbologyPanel {
   constructor() {
-    this._dockedLayer = null;  // layer shown in the docked panel
+    this._dockedLayer = null;
     bus.on(EVENTS.SHOW_SYMBOLOGY, (layer) => this._handleShowSymbology(layer));
   }
 
-  /** Called when SHOW_SYMBOLOGY event fires — open in RightPanel if available, else modal */
   _handleShowSymbology(layer) {
-    // Prefer docked right panel
     const rightPanel = window._rightPanel;
     if (rightPanel) {
       rightPanel.showSymbology(layer);
@@ -40,7 +38,6 @@ export class SymbologyPanel {
     }
   }
 
-  /** Open as a floating modal (fallback) */
   openModal(layer) {
     const content = document.createElement('div');
     content.innerHTML = this._buildContent(layer);
@@ -54,12 +51,6 @@ export class SymbologyPanel {
     this._bindEvents(modal, layer, () => closeModal());
   }
 
-  /**
-   * Render symbology controls into a given container element.
-   * Used by RightPanel to render into the docked pane.
-   * @param {HTMLElement} container
-   * @param {Object} layer
-   */
   renderInto(container, layer) {
     container.innerHTML = this._buildContent(layer);
     this._bindEvents(container, layer, null);
@@ -75,7 +66,7 @@ export class SymbologyPanel {
       </div>`;
   }
 
-  _render(body, layer) {
+  _buildContent(layer) {
     const s = layer.style || {};
     const gt = layer.geometryType;
     const isVector = layer.type === 'vector' || layer.type === 'esri-feature';
@@ -128,13 +119,13 @@ export class SymbologyPanel {
         <div class="form-group">
           <label class="form-label">Fill Color</label>
           <div class="color-input-wrap">
-            <input type="color" id="sym-fill-color" value="${s.fillColor || '#a78bfa'}">
-            <input type="text" class="form-input" id="sym-fill-color-hex" value="${s.fillColor || '#a78bfa'}">
+            <input type="color" id="sym-point-color" value="${s.pointColor || '#60a5fa'}">
+            <input type="text" class="form-input" id="sym-point-color-hex" value="${s.pointColor || '#60a5fa'}">
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Fill Opacity <span id="sym-fill-opacity-val">${Math.round((s.fillOpacity ?? 0.35)*100)}%</span></label>
-          <input type="range" id="sym-fill-opacity" min="0" max="1" step="0.05" value="${s.fillOpacity ?? 0.35}" style="width:100%">
+          <label class="form-label">Radius <span id="sym-point-radius-val">${s.pointRadius || 6}px</span></label>
+          <input type="range" id="sym-point-radius" min="2" max="30" step="1" value="${s.pointRadius || 6}" style="width:100%">
         </div>
         ` : ''}
         ${gt === 'Polygon' ? `
@@ -230,10 +221,13 @@ export class SymbologyPanel {
         <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
           Tip: Click Apply to see labels on the map.
         </p>
+        <div class="sym-actions">
+          <button class="btn btn-primary" id="sym-apply">Apply</button>
+        </div>
       </div>
 
       <!-- CLASSIFICATION TAB -->
-      <div id="tab-classification" class="tab-content sym-section" style="display:none">
+      <div id="tab-classify" class="tab-content sym-section" style="display:none">
         <div class="form-group">
           <label class="form-label">Type</label>
           <select class="form-select" id="sym-class-type">
@@ -247,7 +241,7 @@ export class SymbologyPanel {
             <label class="form-label">Field</label>
             <select class="form-select" id="sym-class-field">
               <option value="">— Select —</option>
-              ${classFieldOptions}
+              ${fieldOptions}
             </select>
           </div>
           <div class="form-group">
@@ -271,17 +265,14 @@ export class SymbologyPanel {
           <div id="sym-class-preview" class="class-list"></div>
         </div>
         <div class="sym-actions">
-          <button class="btn btn-primary" id="sym-classify-apply">Apply</button>
+          <button class="btn btn-primary" id="sym-apply">Apply</button>
         </div>
       </div>
 
       <div class="sym-footer">
         <button class="btn btn-ghost" id="sym-cancel">Cancel</button>
-        <button class="btn btn-primary" id="sym-apply">Apply</button>
       </div>
     `;
-
-    this._bindEvents(body, layer);
   }
 
   _bindEvents(container, layer, onClose) {
@@ -298,9 +289,8 @@ export class SymbologyPanel {
         container.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         container.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
         tab.classList.add('active');
-        container.querySelector(`#tab-${tab.dataset.tab}`)?.style && (
-          container.querySelector(`#tab-${tab.dataset.tab}`).style.display = 'block'
-        );
+        const pane = container.querySelector(`#tab-${tab.dataset.tab}`);
+        if (pane) pane.style.display = 'block';
       });
     });
 
@@ -313,22 +303,14 @@ export class SymbologyPanel {
       });
     });
 
-    // Symbol type picker
-    el.querySelectorAll('.sym-symbol-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        el.querySelectorAll('.sym-symbol-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-      });
-    });
-
     // Color sync pairs
     [
-      ['sym-fill-color', 'sym-fill-color-hex'],
-      ['sym-point-color', 'sym-point-color-hex'],
-      ['sym-line-color', 'sym-line-color-hex'],
+      ['sym-fill-color',   'sym-fill-color-hex'],
+      ['sym-point-color',  'sym-point-color-hex'],
+      ['sym-line-color',   'sym-line-color-hex'],
       ['sym-stroke-color', 'sym-stroke-color-hex'],
-      ['sym-label-color', 'sym-label-color-hex'],
-      ['sym-halo-color', 'sym-halo-color-hex'],
+      ['sym-label-color',  'sym-label-color-hex'],
+      ['sym-halo-color',   'sym-halo-color-hex'],
     ].forEach(([picker, text]) => {
       const p = container.querySelector(`#${picker}`);
       const t = container.querySelector(`#${text}`);
@@ -339,12 +321,12 @@ export class SymbologyPanel {
 
     // Range display values
     [
-      ['sym-fill-opacity', 'sym-fill-opacity-val', v => `${Math.round(v * 100)}%`],
-      ['sym-point-radius', 'sym-point-radius-val', v => `${v}px`],
-      ['sym-line-width', 'sym-line-width-val', v => `${v}px`],
-      ['sym-stroke-width', 'sym-stroke-width-val', v => `${v}px`],
-      ['sym-opacity', 'sym-opacity-val', v => `${Math.round(v * 100)}%`],
-      ['sym-label-size', 'sym-label-size-val', v => `${v}px`],
+      ['sym-fill-opacity',   'sym-fill-opacity-val',   v => `${Math.round(v * 100)}%`],
+      ['sym-point-radius',   'sym-point-radius-val',   v => `${v}px`],
+      ['sym-line-width',     'sym-line-width-val',     v => `${v}px`],
+      ['sym-stroke-width',   'sym-stroke-width-val',   v => `${v}px`],
+      ['sym-opacity',        'sym-opacity-val',        v => `${Math.round(v * 100)}%`],
+      ['sym-label-size',     'sym-label-size-val',     v => `${v}px`],
     ].forEach(([rangeId, valId, fmt]) => {
       const range = container.querySelector(`#${rangeId}`);
       const valEl = container.querySelector(`#${valId}`);
@@ -383,22 +365,22 @@ export class SymbologyPanel {
       });
     }
 
-    // Apply
-    container.querySelector('#sym-apply')?.addEventListener('click', () => {
-      const newStyle = this._collectStyle(container, layer, state);
-      layerManager.updateStyle(layer.id, newStyle);
-      const opacityEl = container.querySelector('#sym-opacity');
-      if (opacityEl) {
-        layerManager.updateLayer(layer.id, { opacity: parseFloat(opacityEl.value) });
-      }
-      if (onClose) {
-        onClose();
-      } else {
-        // Re-render the docked panel so it reflects the updated style
-        // and re-binds event listeners with fresh state
-        this.renderInto(container, layer);
-        bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'Symbology applied' });
-      }
+    // Apply (all tabs share the same #sym-apply button)
+    container.querySelectorAll('#sym-apply').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const newStyle = this._collectStyle(container, layer, state);
+        layerManager.updateStyle(layer.id, newStyle);
+        const opacityEl = container.querySelector('#sym-opacity');
+        if (opacityEl) {
+          layerManager.updateLayer(layer.id, { opacity: parseFloat(opacityEl.value) });
+        }
+        if (onClose) {
+          onClose();
+        } else {
+          this.renderInto(container, layer);
+          bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'Symbology applied' });
+        }
+      });
     });
 
     // Cancel
@@ -413,27 +395,35 @@ export class SymbologyPanel {
     const gt = layer.geometryType;
 
     const style = {
-      strokeColor: g('sym-stroke-color') || '#ffffff',
-      strokeWidth: gf('sym-stroke-width') || 1.5,
+      strokeColor:   g('sym-stroke-color') || '#ffffff',
+      strokeWidth:   gf('sym-stroke-width') || 1.5,
       strokeOpacity: 1,
+      labelField:    g('sym-label-field') || null,
+      labelSize:     gf('sym-label-size') || 12,
+      labelColor:    g('sym-label-color') || '#ffffff',
+      labelHaloColor: g('sym-halo-color') || '#0d1a10',
+      type:          g('sym-class-type') || 'single',
     };
+
+    if (style.type !== 'single' && state.classes.length) {
+      style.classes = state.classes;
+      style.classificationField = g('sym-class-field') || null;
+    }
 
     if (gt === 'Polygon') {
       style.fillColor   = g('sym-fill-color') || '#a78bfa';
       style.fillOpacity = gf('sym-fill-opacity') || 0.35;
     } else if (gt === 'LineString') {
-      style.lineColor  = g('sym-line-color') || '#f97316';
-      style.lineWidth  = gf('sym-line-width') || 2;
-      style.lineOpacity = 0.9;
+      style.lineColor     = g('sym-line-color') || '#f97316';
+      style.lineWidth     = gf('sym-line-width') || 2;
+      style.lineOpacity   = 0.9;
       const dash = g('sym-line-dash');
       style.lineDashArray = dash === 'dashed' ? [4,2] : dash === 'dotted' ? [1,2] : dash === 'dash-dot' ? [4,2,1,2] : null;
     } else {
       style.pointColor  = g('sym-point-color') || '#60a5fa';
       style.pointRadius = gf('sym-point-radius') || 6;
-      style.pointShape = state.selectedShape || 'circle';
+      style.pointShape  = state.selectedShape || 'circle';
       style.pointOpacity = 0.85;
-      const symBtn = el.querySelector('.sym-symbol-btn.active');
-      style.pointSymbol = symBtn?.dataset.sym || 'circle';
     }
 
     return style;
@@ -455,10 +445,10 @@ export class SymbologyPanel {
     const interpolatedColors = interpolateColors(ramp, count);
 
     return Array.from({ length: count }, (_, i) => ({
-      min: min + i * step,
-      max: min + (i + 1) * step,
+      min:   min + i * step,
+      max:   min + (i + 1) * step,
       label: `${(min + i * step).toFixed(2)} – ${(min + (i + 1) * step).toFixed(2)}`,
-      color: colors[i],
+      color: interpolatedColors[i],
     }));
   }
 
@@ -489,8 +479,8 @@ function interpolateColors(ramp, count) {
 
 function lerpColor(a, b, t) {
   const ah = a.replace('#',''), bh = b.replace('#','');
-  const r = Math.round(parseInt(ah.slice(0,2),16) + (parseInt(bh.slice(0,2),16)-parseInt(ah.slice(0,2),16))*t);
-  const g = Math.round(parseInt(ah.slice(2,4),16) + (parseInt(bh.slice(2,4),16)-parseInt(ah.slice(2,4),16))*t);
-  const bv= Math.round(parseInt(ah.slice(4,6),16) + (parseInt(bh.slice(4,6),16)-parseInt(ah.slice(4,6),16))*t);
+  const r  = Math.round(parseInt(ah.slice(0,2),16) + (parseInt(bh.slice(0,2),16)-parseInt(ah.slice(0,2),16))*t);
+  const g  = Math.round(parseInt(ah.slice(2,4),16) + (parseInt(bh.slice(2,4),16)-parseInt(ah.slice(2,4),16))*t);
+  const bv = Math.round(parseInt(ah.slice(4,6),16) + (parseInt(bh.slice(4,6),16)-parseInt(ah.slice(4,6),16))*t);
   return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${bv.toString(16).padStart(2,'0')}`;
 }
