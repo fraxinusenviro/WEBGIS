@@ -12,15 +12,17 @@ export const BM_EVENTS = {
  * BasemapLayerManager — manages a stack of basemap raster layers directly
  * on the MapLibre map, independent of LayerManager. Always rendered below
  * user vector/raster layers.
+ *
+ * Supports hybrid basemaps (e.g. ESRI Imagery Hybrid) that have a second
+ * tile overlay layer (labels) stored in entry.overlayLayerId.
  */
 export class BasemapLayerManager {
   constructor() {
     this._map = null;
-    this._stack = []; // [{uid, presetId, name, sourceId, layerId, tiles, tileSize, maxzoom, opacity, saturation, visible}]
+    this._stack = [];
 
     bus.on(EVENTS.MAP_READY, ({ map }) => {
       this._map = map;
-      // Render any pre-queued entries (e.g. from restore before map ready)
       for (const entry of this._stack) {
         if (!this._map.getSource(entry.sourceId)) {
           this._renderEntry(entry);
@@ -31,11 +33,13 @@ export class BasemapLayerManager {
 
   get stack() { return [...this._stack]; }
 
-  /** Add a basemap from preset id, with optional initial overrides */
-  addBasemap(presetId, options = {}) {
+  /** Add a basemap from preset id */
+  addBasemap(presetId, opts = {}) {
     if (presetId === 'none') return null;
     const preset = BASEMAPS[presetId];
     if (!preset) return null;
+
+    // Pick first source for the base tile layer
     const srcObj = Object.values(preset.style.sources || {})[0];
     if (!srcObj?.tiles) return null;
 
@@ -49,10 +53,20 @@ export class BasemapLayerManager {
       tiles: srcObj.tiles,
       tileSize: srcObj.tileSize || 256,
       maxzoom: srcObj.maxzoom || 19,
-      opacity: options.opacity !== undefined ? options.opacity : 1.0,
-      saturation: options.saturation !== undefined ? options.saturation : 0,
-      visible: options.visible !== undefined ? options.visible : true,
+      opacity: opts.opacity !== undefined ? opts.opacity : 1.0,
+      saturation: opts.saturation !== undefined ? opts.saturation : 0,
+      visible: opts.visible !== undefined ? opts.visible : true,
+      // Hybrid overlay (e.g. ESRI labels on top of imagery)
+      overlayTiles: preset.overlayTiles || null,
+      overlayMaxzoom: preset.overlayMaxzoom || 19,
+      overlaySourceId: null,
+      overlayLayerId: null,
     };
+
+    if (entry.overlayTiles) {
+      entry.overlaySourceId = `bm-src-ov-${uid}`;
+      entry.overlayLayerId = `bm-lyr-ov-${uid}`;
+    }
 
     this._stack.push(entry);
     if (this._map) this._renderEntry(entry);
@@ -77,6 +91,9 @@ export class BasemapLayerManager {
     if (this._map?.getLayer(entry.layerId)) {
       this._map.setPaintProperty(entry.layerId, 'raster-opacity', entry.visible ? val : 0);
     }
+    if (entry.overlayLayerId && this._map?.getLayer(entry.overlayLayerId)) {
+      this._map.setPaintProperty(entry.overlayLayerId, 'raster-opacity', entry.visible ? val : 0);
+    }
     bus.emit(BM_EVENTS.UPDATED, { uid });
   }
 
@@ -87,6 +104,9 @@ export class BasemapLayerManager {
     if (this._map?.getLayer(entry.layerId)) {
       this._map.setPaintProperty(entry.layerId, 'raster-saturation', val);
     }
+    if (entry.overlayLayerId && this._map?.getLayer(entry.overlayLayerId)) {
+      this._map.setPaintProperty(entry.overlayLayerId, 'raster-saturation', val);
+    }
     bus.emit(BM_EVENTS.UPDATED, { uid });
   }
 
@@ -96,6 +116,9 @@ export class BasemapLayerManager {
     entry.visible = !entry.visible;
     if (this._map?.getLayer(entry.layerId)) {
       this._map.setPaintProperty(entry.layerId, 'raster-opacity', entry.visible ? entry.opacity : 0);
+    }
+    if (entry.overlayLayerId && this._map?.getLayer(entry.overlayLayerId)) {
+      this._map.setPaintProperty(entry.overlayLayerId, 'raster-opacity', entry.visible ? entry.opacity : 0);
     }
     bus.emit(BM_EVENTS.UPDATED, { uid });
   }
@@ -121,13 +144,15 @@ export class BasemapLayerManager {
   _renderEntry(entry) {
     if (!this._map) return;
     try {
+      const before = this._getFirstUserLayerId();
+
+      // Base raster layer
       this._map.addSource(entry.sourceId, {
         type: 'raster',
         tiles: entry.tiles,
         tileSize: entry.tileSize,
         maxzoom: entry.maxzoom,
       });
-      const before = this._getFirstUserLayerId();
       this._map.addLayer({
         id: entry.layerId,
         type: 'raster',
@@ -137,6 +162,25 @@ export class BasemapLayerManager {
           'raster-saturation': entry.saturation,
         },
       }, before || undefined);
+
+      // Hybrid overlay layer (labels on top of imagery)
+      if (entry.overlayTiles && entry.overlaySourceId && entry.overlayLayerId) {
+        this._map.addSource(entry.overlaySourceId, {
+          type: 'raster',
+          tiles: entry.overlayTiles,
+          tileSize: 256,
+          maxzoom: entry.overlayMaxzoom,
+        });
+        this._map.addLayer({
+          id: entry.overlayLayerId,
+          type: 'raster',
+          source: entry.overlaySourceId,
+          paint: {
+            'raster-opacity': entry.visible ? entry.opacity : 0,
+            'raster-saturation': entry.saturation,
+          },
+        }, before || undefined);
+      }
     } catch (e) {
       console.error('Failed to render basemap:', e);
     }
@@ -145,6 +189,12 @@ export class BasemapLayerManager {
   _removeFromMap(entry) {
     if (!this._map) return;
     try {
+      if (entry.overlayLayerId && this._map.getLayer(entry.overlayLayerId)) {
+        this._map.removeLayer(entry.overlayLayerId);
+      }
+      if (entry.overlaySourceId && this._map.getSource(entry.overlaySourceId)) {
+        this._map.removeSource(entry.overlaySourceId);
+      }
       if (this._map.getLayer(entry.layerId)) this._map.removeLayer(entry.layerId);
       if (this._map.getSource(entry.sourceId)) this._map.removeSource(entry.sourceId);
     } catch (e) {}
@@ -163,13 +213,18 @@ export class BasemapLayerManager {
 
   _reorderOnMap() {
     if (!this._map) return;
-    // _stack[0] = bottommost, _stack[n] = topmost basemap
     for (let i = 0; i < this._stack.length; i++) {
       const entry = this._stack[i];
-      if (!this._map.getLayer(entry.layerId)) continue;
       const nextBm = this._stack[i + 1];
       const beforeId = nextBm?.layerId || this._getFirstUserLayerId() || undefined;
-      try { this._map.moveLayer(entry.layerId, beforeId); } catch (e) {}
+      try {
+        if (this._map.getLayer(entry.layerId)) {
+          this._map.moveLayer(entry.layerId, beforeId);
+        }
+        if (entry.overlayLayerId && this._map.getLayer(entry.overlayLayerId)) {
+          this._map.moveLayer(entry.overlayLayerId, beforeId);
+        }
+      } catch (e) {}
     }
   }
 
@@ -185,11 +240,11 @@ export class BasemapLayerManager {
   restore(saved) {
     for (const b of [...this._stack]) this.removeBasemap(b.uid);
     for (const s of (saved || [])) {
-      const entry = this.addBasemap(s.presetId);
-      if (!entry) continue;
-      if (s.opacity !== undefined) this.setOpacity(entry.uid, s.opacity);
-      if (s.saturation !== undefined) this.setSaturation(entry.uid, s.saturation);
-      if (s.visible === false) this.toggleVisible(entry.uid);
+      const entry = this.addBasemap(s.presetId, {
+        opacity: s.opacity,
+        saturation: s.saturation,
+        visible: s.visible,
+      });
     }
   }
 }

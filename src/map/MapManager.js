@@ -3,6 +3,10 @@ import { bus, EVENTS } from '../utils/EventBus.js';
 import { BasemapManager, BASEMAPS } from './BasemapManager.js';
 import { formatDD, formatDMS, lngLatToMercator, zoomToScale } from '../utils/coordinates.js';
 
+// Nova Scotia approximate bounding box center and zoom
+const NS_CENTER = [-63.0, 45.0];
+const NS_ZOOM = 6.5;
+
 export class MapManager {
   constructor() {
     this._map = null;
@@ -12,13 +16,20 @@ export class MapManager {
   }
 
   init(containerId, options = {}) {
-    const style = BASEMAPS.none.style;
+    // Base style with glyphs URL so symbol/label layers render correctly
+    const style = {
+      version: 8,
+      sources: {},
+      layers: [],
+      // Public OpenMapTiles glyph CDN — supports Open Sans, Noto Sans, etc.
+      glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+    };
 
     this._map = new maplibregl.Map({
       container: containerId,
       style,
-      center: options.center || [-63.2, 45.0],
-      zoom: options.zoom || 7,
+      center: options.center || NS_CENTER,
+      zoom: options.zoom || NS_ZOOM,
       bearing: options.bearing || 0,
       pitch: options.pitch || 0,
       attributionControl: false,
@@ -75,7 +86,7 @@ export class MapManager {
   }
 
   setBasemap(basemapId) {
-    // Basemaps are now managed by BasemapLayerManager - no style swapping
+    // Basemaps are managed by BasemapLayerManager
   }
 
   getState() {
@@ -90,9 +101,13 @@ export class MapManager {
   }
 
   zoomToExtent(bounds) {
-    // bounds: [[minLng, minLat], [maxLng, maxLat]]
     if (!bounds) return;
     this._map.fitBounds(bounds, { padding: 48, duration: 600 });
+  }
+
+  /** Fly to Nova Scotia home extent */
+  flyHome() {
+    this._map?.flyTo({ center: NS_CENTER, zoom: NS_ZOOM, duration: 900 });
   }
 
   showPopup(lngLat, html) {

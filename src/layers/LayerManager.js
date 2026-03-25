@@ -3,12 +3,16 @@ import { uid } from '../utils/uid.js';
 import { getBounds } from '../utils/coordinates.js';
 import { storage } from '../storage/StorageManager.js';
 
+/** Supported point symbol shapes */
+export const POINT_SHAPES = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'octagon', 'star', 'pentagon'];
+
 /** Default styles for each geometry type */
 export const DEFAULT_STYLES = {
   Point: {
     type: 'single',
     pointColor: '#60a5fa',
     pointRadius: 6,
+    pointShape: 'circle',     // circle | square | triangle | diamond | cross | x | octagon | star | pentagon
     pointOpacity: 0.85,
     strokeColor: '#ffffff',
     strokeWidth: 1.5,
@@ -288,8 +292,38 @@ export class LayerManager {
       layerIds.push(lineId);
 
     } else { // Point
-      const sym = style.pointSymbol || 'circle';
-      if (sym === 'circle') {
+      const shape = style.pointShape || 'circle';
+      const useSymbol = shape !== 'circle' && style.type === 'single';
+
+      if (useSymbol) {
+        // Custom shape via symbol layer with canvas-drawn icon image
+        const iconKey = this._ensureMarkerImage(
+          shape,
+          style.pointColor || '#60a5fa',
+          (style.pointRadius || 6) * 2,
+          style.strokeColor || '#ffffff',
+          style.strokeWidth || 1.5,
+        );
+        const symbolId = `${layer.id}-symbol`;
+        map.addLayer({
+          id: symbolId,
+          type: 'symbol',
+          source: srcId,
+          filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+          layout: {
+            'icon-image': iconKey,
+            'icon-size': 1,
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+            visibility: layer.visible ? 'visible' : 'none',
+          },
+          paint: {
+            'icon-opacity': ['*', (style.pointOpacity ?? 0.85), layer.opacity],
+          },
+        });
+        layerIds.push(symbolId);
+      } else {
+        // Default circle layer (supports color expressions for classification)
         const circleId = `${layer.id}-circle`;
         map.addLayer({
           id: circleId,
@@ -307,27 +341,6 @@ export class LayerManager {
           layout: { visibility: layer.visible ? 'visible' : 'none' },
         });
         layerIds.push(circleId);
-      } else {
-        // Non-circle symbols rendered via symbol layer with canvas-generated icon
-        const iconName = `wgis-sym-${sym}`;
-        this._ensureSymbolImage(map, sym, style.pointColor || '#60a5fa', style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
-        const symId = `${layer.id}-symbol`;
-        map.addLayer({
-          id: symId,
-          type: 'symbol',
-          source: srcId,
-          filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
-          layout: {
-            'icon-image': iconName,
-            'icon-size': (style.pointRadius || 6) / 8,
-            'icon-allow-overlap': true,
-            visibility: layer.visible ? 'visible' : 'none',
-          },
-          paint: {
-            'icon-opacity': ['*', (style.pointOpacity ?? 0.85), layer.opacity],
-          },
-        });
-        layerIds.push(symId);
       }
     }
 
@@ -341,9 +354,12 @@ export class LayerManager {
         layout: {
           'text-field': ['get', style.labelField],
           'text-size': style.labelSize || 12,
-          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          // Use Noto Sans which is widely available in OpenMapTiles glyph CDN
+          'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
           'text-offset': gt === 'Point' ? [0, 1.2] : [0, 0],
           'text-anchor': gt === 'Point' ? 'top' : 'center',
+          'text-max-width': 8,
+          'text-allow-overlap': false,
           visibility: layer.visible ? 'visible' : 'none',
         },
         paint: {
@@ -575,39 +591,78 @@ export class LayerManager {
           this._map.setPaintProperty(lineId, 'line-opacity', ['*', (style.lineOpacity ?? 0.9), op]);
         }
       } else {
+        // Handle circle vs symbol shape transitions
+        const shape = style.pointShape || 'circle';
+        const useSymbol = shape !== 'circle' && style.type === 'single';
         const circleId = `${layer.id}-circle`;
-        const symId    = `${layer.id}-symbol`;
-        const sym = style.pointSymbol || 'circle';
+        const symbolId = `${layer.id}-symbol`;
 
-        if (sym === 'circle') {
-          // Remove symbol layer if switching back to circle
-          if (this._map.getLayer(symId)) { this._map.removeLayer(symId); layer._mlLayerIds = layer._mlLayerIds.filter(id => id !== symId); }
-          if (!this._map.getLayer(circleId)) {
-            // Re-add circle layer
-            this._addVectorLayer(layer);
-            return;
+        if (useSymbol) {
+          // Remove circle layer if it exists
+          if (this._map.getLayer(circleId)) {
+            this._map.removeLayer(circleId);
+            layer._mlLayerIds = layer._mlLayerIds.filter(id => id !== circleId);
           }
-          this._map.setPaintProperty(circleId, 'circle-color', this._getFillExpression(layer));
-          this._map.setPaintProperty(circleId, 'circle-radius', style.pointRadius || 6);
-          this._map.setPaintProperty(circleId, 'circle-opacity', ['*', (style.pointOpacity ?? 0.85), op]);
-          this._map.setPaintProperty(circleId, 'circle-stroke-color', style.strokeColor || '#ffffff');
-          this._map.setPaintProperty(circleId, 'circle-stroke-width', style.strokeWidth || 1.5);
-        } else {
-          // Remove circle layer if switching away from circle
-          if (this._map.getLayer(circleId)) { this._map.removeLayer(circleId); layer._mlLayerIds = layer._mlLayerIds.filter(id => id !== circleId); }
-          const iconName = `wgis-sym-${sym}`;
-          // Regenerate image with new colors
-          if (this._map.hasImage(iconName)) this._map.removeImage(iconName);
-          this._ensureSymbolImage(this._map, sym, style.pointColor || '#60a5fa', style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
-          if (this._map.getLayer(symId)) {
-            this._map.setLayoutProperty(symId, 'icon-image', iconName);
-            this._map.setLayoutProperty(symId, 'icon-size', (style.pointRadius || 6) / 8);
-            this._map.setPaintProperty(symId, 'icon-opacity', ['*', (style.pointOpacity ?? 0.85), op]);
+          // Add/update symbol layer
+          const iconKey = this._ensureMarkerImage(
+            shape,
+            style.pointColor || '#60a5fa',
+            (style.pointRadius || 6) * 2,
+            style.strokeColor || '#ffffff',
+            style.strokeWidth || 1.5,
+          );
+          if (!this._map.getLayer(symbolId)) {
+            const srcId = layer._mlSourceId;
+            this._map.addLayer({
+              id: symbolId,
+              type: 'symbol',
+              source: srcId,
+              filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+              layout: {
+                'icon-image': iconKey,
+                'icon-size': 1,
+                'icon-allow-overlap': true,
+                'icon-ignore-placement': true,
+                visibility: layer.visible ? 'visible' : 'none',
+              },
+              paint: { 'icon-opacity': ['*', (style.pointOpacity ?? 0.85), op] },
+            });
+            if (!layer._mlLayerIds.includes(symbolId)) layer._mlLayerIds.push(symbolId);
           } else {
-            // Add symbol layer fresh
-            this._removeFromMap(layer);
-            this._addToMap(layer);
-            return;
+            this._map.setLayoutProperty(symbolId, 'icon-image', iconKey);
+            this._map.setPaintProperty(symbolId, 'icon-opacity', ['*', (style.pointOpacity ?? 0.85), op]);
+          }
+        } else {
+          // Remove symbol layer if it exists
+          if (this._map.getLayer(symbolId)) {
+            this._map.removeLayer(symbolId);
+            layer._mlLayerIds = layer._mlLayerIds.filter(id => id !== symbolId);
+          }
+          // Add/update circle layer
+          if (!this._map.getLayer(circleId)) {
+            const srcId = layer._mlSourceId;
+            this._map.addLayer({
+              id: circleId,
+              type: 'circle',
+              source: srcId,
+              filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+              paint: {
+                'circle-color': this._getFillExpression(layer),
+                'circle-radius': style.pointRadius || 6,
+                'circle-opacity': ['*', (style.pointOpacity ?? 0.85), op],
+                'circle-stroke-color': style.strokeColor || '#ffffff',
+                'circle-stroke-width': style.strokeWidth || 1.5,
+                'circle-stroke-opacity': ['*', (style.strokeOpacity ?? 1), op],
+              },
+              layout: { visibility: layer.visible ? 'visible' : 'none' },
+            });
+            if (!layer._mlLayerIds.includes(circleId)) layer._mlLayerIds.push(circleId);
+          } else {
+            this._map.setPaintProperty(circleId, 'circle-color', this._getFillExpression(layer));
+            this._map.setPaintProperty(circleId, 'circle-radius', style.pointRadius || 6);
+            this._map.setPaintProperty(circleId, 'circle-opacity', ['*', (style.pointOpacity ?? 0.85), op]);
+            this._map.setPaintProperty(circleId, 'circle-stroke-color', style.strokeColor || '#ffffff');
+            this._map.setPaintProperty(circleId, 'circle-stroke-width', style.strokeWidth || 1.5);
           }
         }
       }
@@ -624,9 +679,10 @@ export class LayerManager {
             layout: {
               'text-field': ['get', style.labelField],
               'text-size': style.labelSize || 12,
-              'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+              'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
               'text-offset': gt === 'Point' ? [0, 1.2] : [0, 0],
               'text-anchor': gt === 'Point' ? 'top' : 'center',
+              'text-max-width': 8,
               visibility: layer.visible ? 'visible' : 'none',
             },
             paint: {
@@ -642,9 +698,7 @@ export class LayerManager {
           this._map.setLayoutProperty(labelId, 'text-size', style.labelSize || 12);
           this._map.setPaintProperty(labelId, 'text-color', style.labelColor || '#ffffff');
           this._map.setPaintProperty(labelId, 'text-halo-color', style.labelHaloColor || '#0d1a10');
-          this._map.setPaintProperty(labelId, 'text-halo-width', style.labelHaloWidth || 1);
           this._map.setPaintProperty(labelId, 'text-opacity', op);
-          this._map.setLayoutProperty(labelId, 'visibility', layer.visible ? 'visible' : 'none');
         }
       } else if (this._map.getLayer(labelId)) {
         this._map.removeLayer(labelId);
@@ -785,6 +839,23 @@ export class LayerManager {
     }
   }
 
+  /**
+   * Ensure a marker image is loaded on the map for the given shape/color.
+   * Returns the image key (to use as icon-image).
+   */
+  _ensureMarkerImage(shape, color, diameter, strokeColor, strokeWidth) {
+    if (!this._map) return null;
+    const size = Math.max(16, Math.min(64, Math.round(diameter * 1.5)));
+    const key = `marker-${shape}-${color.replace('#', '')}-${size}-${strokeColor.replace('#', '')}-${Math.round(strokeWidth)}`;
+    if (!this._map.hasImage(key)) {
+      const canvas = createMarkerCanvas(shape, size, color, strokeColor, strokeWidth);
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, size, size);
+      this._map.addImage(key, imageData);
+    }
+    return key;
+  }
+
   /** Get all fields from a vector layer */
   getFields(id) {
     const layer = this._getLayer(id);
@@ -899,3 +970,116 @@ export class LayerManager {
 }
 
 export const layerManager = new LayerManager();
+
+// ── Canvas-based marker image generator ──────────────────────────────────────
+
+/**
+ * Draw a point marker shape onto a canvas.
+ * Returns the canvas element.
+ */
+function createMarkerCanvas(shape, size, fillColor, strokeColor, strokeWidth) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const c = size / 2;
+  const sw = strokeWidth || 1.5;
+  const r = c - sw - 1;  // inner radius, accounts for stroke bleed
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.beginPath();
+
+  switch (shape) {
+    case 'square':
+      ctx.rect(c - r, c - r, r * 2, r * 2);
+      break;
+
+    case 'triangle':
+      ctx.moveTo(c, c - r);
+      ctx.lineTo(c + r, c + r);
+      ctx.lineTo(c - r, c + r);
+      ctx.closePath();
+      break;
+
+    case 'diamond':
+      ctx.moveTo(c, c - r);
+      ctx.lineTo(c + r, c);
+      ctx.lineTo(c, c + r);
+      ctx.lineTo(c - r, c);
+      ctx.closePath();
+      break;
+
+    case 'pentagon':
+      for (let i = 0; i < 5; i++) {
+        const a = (i * 2 * Math.PI / 5) - Math.PI / 2;
+        i === 0 ? ctx.moveTo(c + r * Math.cos(a), c + r * Math.sin(a))
+                : ctx.lineTo(c + r * Math.cos(a), c + r * Math.sin(a));
+      }
+      ctx.closePath();
+      break;
+
+    case 'octagon':
+      for (let i = 0; i < 8; i++) {
+        const a = (i * 2 * Math.PI / 8) - Math.PI / 8;
+        i === 0 ? ctx.moveTo(c + r * Math.cos(a), c + r * Math.sin(a))
+                : ctx.lineTo(c + r * Math.cos(a), c + r * Math.sin(a));
+      }
+      ctx.closePath();
+      break;
+
+    case 'star': {
+      const outerR = r, innerR = r * 0.45;
+      for (let i = 0; i < 10; i++) {
+        const a = (i * Math.PI / 5) - Math.PI / 2;
+        const rad = i % 2 === 0 ? outerR : innerR;
+        i === 0 ? ctx.moveTo(c + rad * Math.cos(a), c + rad * Math.sin(a))
+                : ctx.lineTo(c + rad * Math.cos(a), c + rad * Math.sin(a));
+      }
+      ctx.closePath();
+      break;
+    }
+
+    case 'cross': {
+      const arm = r * 0.38;
+      ctx.moveTo(c - arm, c - r); ctx.lineTo(c + arm, c - r);
+      ctx.lineTo(c + arm, c - arm); ctx.lineTo(c + r, c - arm);
+      ctx.lineTo(c + r, c + arm); ctx.lineTo(c + arm, c + arm);
+      ctx.lineTo(c + arm, c + r); ctx.lineTo(c - arm, c + r);
+      ctx.lineTo(c - arm, c + arm); ctx.lineTo(c - r, c + arm);
+      ctx.lineTo(c - r, c - arm); ctx.lineTo(c - arm, c - arm);
+      ctx.closePath();
+      break;
+    }
+
+    case 'x': {
+      // Cross rotated 45°
+      const arm = r * 0.38;
+      ctx.save();
+      ctx.translate(c, c);
+      ctx.rotate(Math.PI / 4);
+      ctx.moveTo(-arm, -r); ctx.lineTo(arm, -r);
+      ctx.lineTo(arm, -arm); ctx.lineTo(r, -arm);
+      ctx.lineTo(r, arm); ctx.lineTo(arm, arm);
+      ctx.lineTo(arm, r); ctx.lineTo(-arm, r);
+      ctx.lineTo(-arm, arm); ctx.lineTo(-r, arm);
+      ctx.lineTo(-r, -arm); ctx.lineTo(-arm, -arm);
+      ctx.closePath();
+      ctx.restore();
+      break;
+    }
+
+    default: // circle
+      ctx.arc(c, c, r, 0, Math.PI * 2);
+  }
+
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+
+  if (sw > 0 && strokeColor) {
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = sw;
+    ctx.stroke();
+  }
+
+  return canvas;
+}

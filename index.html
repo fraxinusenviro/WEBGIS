@@ -74,16 +74,20 @@
             <span>Table</span>
           </button>
           <button class="tb-btn" id="btn-data-catalog" title="Data Catalog">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v4H3z"/><path d="M3 10h18v4H3z"/><path d="M3 17h18v4H3z"/><line x1="8" y1="3" x2="8" y2="21"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M3 14h7v7H3z"/><path d="M14 14h7v7h-7z"/></svg>
             <span>Catalog</span>
           </button>
         </div>
         <div class="toolbar-sep"></div>
+        <!-- Felt upload button -->
         <div class="toolbar-group">
-          <!-- Felt Upload Button -->
           <button class="tb-btn felt-btn" id="btn-felt-upload" title="Upload to Felt">
-            <svg viewBox="0 0 24 24"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-            <span>Felt</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>Upload to Felt</span>
           </button>
         </div>
       </nav>
@@ -95,9 +99,10 @@
       </div>
     </header>
 
-    <!-- Main Content -->
+    <!-- Main Content: TOC | Resize | Map | RightPanel -->
     <div id="main-content">
-      <!-- Left Panel: TOC -->
+
+      <!-- Left Panel: TOC with resizable 60/40 split between Layers and Basemaps -->
       <aside id="toc-panel" class="side-panel">
         <div class="panel-header">
           <span class="panel-title">Layers</span>
@@ -106,23 +111,28 @@
             <button class="panel-btn" id="btn-toc-collapse" title="Collapse All">−</button>
           </div>
         </div>
-        <!-- Layer list (top ~60%) -->
-        <div id="layer-list" class="layer-list">
-          <div class="empty-state">
-            <svg viewBox="0 0 24 24"><path d="M3 6l9-3 9 3-9 3z"/><path d="M3 12l9-3 9 3-9 3z"/><path d="M3 18l9-3 9 3-9 3z"/></svg>
-            <p>No layers yet.<br>Add a file or service to begin.</p>
+
+        <!-- Layers section (60% default height) -->
+        <div id="layer-section" class="toc-section">
+          <div id="layer-list" class="layer-list">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24"><path d="M3 6l9-3 9 3-9 3z"/><path d="M3 12l9-3 9 3-9 3z"/><path d="M3 18l9-3 9 3-9 3z"/></svg>
+              <p>No layers yet.<br>Add a file or service to begin.</p>
+            </div>
           </div>
         </div>
 
-        <!-- Internal vertical resize handle -->
-        <div id="toc-vsplit-handle" class="toc-vsplit-handle" title="Drag to resize"></div>
-
-        <!-- Basemap section (bottom ~40%) -->
-        <div id="basemap-section" class="basemap-section">
+        <!-- Draggable split handle between Layers and Basemaps -->
+        <div id="toc-split-handle" class="toc-split-handle" title="Drag to resize">
           <div class="toc-section-header">
             <span class="toc-section-label">Basemaps</span>
             <button class="panel-btn" id="btn-add-basemap" title="Add Basemap">+</button>
           </div>
+          <div class="split-grip"></div>
+        </div>
+
+        <!-- Basemaps section (40% default height) -->
+        <div id="basemap-section" class="toc-section toc-basemap-section">
           <div id="basemap-list" class="basemap-list">
             <div class="bm-empty">No basemaps. Click + to add one.</div>
           </div>
@@ -136,7 +146,7 @@
         </div>
       </aside>
 
-      <!-- Left Resize Handle -->
+      <!-- TOC Horizontal Resize Handle -->
       <div id="toc-resize-handle" class="resize-handle"></div>
 
       <!-- Map Container -->
@@ -181,7 +191,7 @@
           <button class="map-ctrl-btn" id="ctrl-zoom-in" title="Zoom In">+</button>
           <button class="map-ctrl-btn" id="ctrl-zoom-out" title="Zoom Out">−</button>
           <div class="ctrl-sep"></div>
-          <button class="map-ctrl-btn" id="ctrl-home" title="Home Extent">
+          <button class="map-ctrl-btn" id="ctrl-home" title="Home Extent (Nova Scotia)">
             <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           </button>
           <button class="map-ctrl-btn" id="ctrl-location" title="My Location">
@@ -209,43 +219,9 @@
         </div>
       </div>
 
-      <!-- Right Panel Resize Handle -->
-      <div id="right-resize-handle" class="resize-handle right-resize-handle"></div>
+      <!-- Right Panel: tabbed Catalog + Symbology (docked, collapsible) -->
+      <div id="right-panel" class="right-panel"></div>
 
-      <!-- Right Panel: Catalog + Symbology tabs -->
-      <aside id="right-panel" class="right-panel collapsed" data-active-tab="catalog">
-        <div class="rpanel-header">
-          <div class="rpanel-tabs">
-            <button class="rpanel-tab active" data-tab="catalog">
-              <svg viewBox="0 0 24 24"><path d="M3 3h18v4H3z"/><path d="M3 10h18v4H3z"/><path d="M3 17h18v4H3z"/></svg>
-              Catalog
-            </button>
-            <button class="rpanel-tab" data-tab="symbology">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-              Symbology
-            </button>
-          </div>
-          <button class="panel-btn" id="btn-collapse-right" title="Collapse panel">❯</button>
-        </div>
-
-        <!-- Catalog Tab -->
-        <div class="rpanel-content active" data-tab="catalog">
-          <div class="rpanel-toolbar">
-            <button class="btn btn-secondary" id="dc-new-layer-btn" style="font-size:11px;padding:3px 8px">+ New Layer</button>
-          </div>
-          <div id="rpanel-catalog-body" class="rpanel-scroll"></div>
-        </div>
-
-        <!-- Symbology Tab -->
-        <div class="rpanel-content" data-tab="symbology">
-          <div id="rpanel-symbology-body" class="rpanel-scroll">
-            <div class="rpanel-empty">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-              <p>Select a layer to edit symbology.</p>
-            </div>
-          </div>
-        </div>
-      </aside>
     </div>
   </div>
 
