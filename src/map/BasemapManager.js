@@ -1,5 +1,9 @@
 /**
  * Basemap definitions for MapLibre GL JS
+ *
+ * HRDEM services are provided by Natural Resources Canada (NRCan).
+ * WMS endpoint: https://datacube.services.geo.ca/ows/elevation
+ * If layer names change, update the LAYERS= parameter in the tile URLs below.
  */
 export const BASEMAPS = {
   osm: {
@@ -51,6 +55,39 @@ export const BASEMAPS = {
       },
       layers: [{ id: 'esri_sat', type: 'raster', source: 'esri_sat' }],
     },
+  },
+
+  // ESRI Imagery Hybrid: satellite imagery with street/boundary labels overlay
+  // Uses two tile layers: imagery base + reference labels overlay
+  'esri-imagery-hybrid': {
+    name: 'ESRI Imagery Hybrid',
+    hybrid: true,         // flag for BasemapLayerManager to render two layers
+    style: {
+      version: 8,
+      sources: {
+        esri_sat_hybrid: {
+          type: 'raster',
+          tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+          tileSize: 256,
+          attribution: 'Tiles © Esri',
+          maxzoom: 20,
+        },
+        esri_hybrid_labels: {
+          type: 'raster',
+          tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+          tileSize: 256,
+          attribution: 'Tiles © Esri',
+          maxzoom: 20,
+        },
+      },
+      layers: [
+        { id: 'esri_sat_hybrid', type: 'raster', source: 'esri_sat_hybrid' },
+        { id: 'esri_hybrid_labels', type: 'raster', source: 'esri_hybrid_labels' },
+      ],
+    },
+    // Extra overlay tiles rendered on top of the base imagery
+    overlayTiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+    overlayMaxzoom: 20,
   },
 
   'esri-topo': {
@@ -128,6 +165,54 @@ export const BASEMAPS = {
     },
   },
 
+  // HRDEM DTM Hillshade — Natural Resources Canada
+  // Source: https://datacube.services.geo.ca/ows/elevation (WMS)
+  // Layer: dtm-hillshade (verify layer name at service endpoint)
+  'hrdem-dtm-hillshade': {
+    name: 'HRDEM DTM Hillshade',
+    style: {
+      version: 8,
+      sources: {
+        hrdem_dtm_hs: {
+          type: 'raster',
+          tiles: [
+            'https://datacube.services.geo.ca/ows/elevation?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+            '&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256' +
+            '&LAYERS=dtm-hillshade&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&CRS=EPSG:3857',
+          ],
+          tileSize: 256,
+          attribution: '© Natural Resources Canada (NRCan) — HRDEM',
+          maxzoom: 16,
+        },
+      },
+      layers: [{ id: 'hrdem_dtm_hs', type: 'raster', source: 'hrdem_dtm_hs' }],
+    },
+  },
+
+  // HRDEM DSM Hillshade — Natural Resources Canada
+  // Source: https://datacube.services.geo.ca/ows/elevation (WMS)
+  // Layer: dsm-hillshade (verify layer name at service endpoint)
+  'hrdem-dsm-hillshade': {
+    name: 'HRDEM DSM Hillshade',
+    style: {
+      version: 8,
+      sources: {
+        hrdem_dsm_hs: {
+          type: 'raster',
+          tiles: [
+            'https://datacube.services.geo.ca/ows/elevation?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap' +
+            '&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256' +
+            '&LAYERS=dsm-hillshade&STYLES=&FORMAT=image/png&TRANSPARENT=TRUE&CRS=EPSG:3857',
+          ],
+          tileSize: 256,
+          attribution: '© Natural Resources Canada (NRCan) — HRDEM',
+          maxzoom: 16,
+        },
+      },
+      layers: [{ id: 'hrdem_dsm_hs', type: 'raster', source: 'hrdem_dsm_hs' }],
+    },
+  },
+
   none: {
     name: 'None',
     style: {
@@ -148,8 +233,6 @@ export class BasemapManager {
   setCurrent(basemapId) {
     if (!BASEMAPS[basemapId]) return;
     this._current = basemapId;
-    // Swap entire style but preserve user layers
-    // The map style is set once; user layers are added on top
     return basemapId;
   }
 

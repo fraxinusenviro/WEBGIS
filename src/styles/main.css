@@ -1229,3 +1229,468 @@ input[type="range"]::-moz-range-thumb {
   text-align: right;
   font-family: var(--mono);
 }
+
+/* ============================================================
+   NEW STYLES — TOC Split, Right Panel, Catalog, Symbol Picker,
+                Felt Button, Symbology Docked
+   ============================================================ */
+
+/* ---- TOC internal sections with resizable 60/40 split ---- */
+#toc-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.toc-section {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 60px;
+}
+
+#layer-section {
+  flex: 3;          /* 60% by default */
+}
+
+.toc-basemap-section {
+  flex: 2;          /* 40% by default */
+}
+
+#layer-section .layer-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+}
+
+.toc-basemap-section .basemap-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* TOC split handle / basemap section header */
+.toc-split-handle {
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  cursor: row-resize;
+  user-select: none;
+}
+
+.toc-split-handle:hover { background: var(--bg-hover); }
+
+.split-grip {
+  height: 3px;
+  margin: 0 auto;
+  width: 32px;
+  border-radius: 2px;
+  background: var(--border-light);
+  margin-top: 1px;
+  margin-bottom: 2px;
+}
+
+.toc-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px 3px;
+}
+
+.toc-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ---- RIGHT PANEL — docked tabbed panel ---- */
+.right-panel {
+  width: 300px;
+  min-width: 200px;
+  max-width: 500px;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.2s ease;
+  z-index: 10;
+}
+
+.right-panel.collapsed {
+  width: 36px;
+}
+
+.right-panel.collapsed .rp-content,
+.right-panel.collapsed .rp-tabs {
+  display: none;
+}
+
+.rp-header {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 4px 0 0;
+}
+
+.rp-tabs {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.rp-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.rp-tab svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; flex-shrink: 0; }
+.rp-tab:hover { color: var(--text-primary); }
+.rp-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.rp-collapse-btn {
+  width: 24px; height: 24px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.rp-collapse-btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; transition: transform 0.2s; }
+.rp-collapse-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-light); }
+
+.rp-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rp-pane {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Symbology empty state inside right panel */
+.rp-sym-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  text-align: center;
+  gap: 12px;
+  flex: 1;
+}
+.rp-sym-empty svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 1.5; opacity: 0.4; }
+.rp-sym-empty p { font-size: 12px; line-height: 1.6; }
+
+/* ---- CATALOG TREE (filesystem-style) ---- */
+.catalog-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 4px;
+}
+.catalog-toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.15s;
+}
+.catalog-toolbar-btn svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; }
+.catalog-toolbar-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-light); }
+
+.catalog-tree {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.catalog-tree::-webkit-scrollbar { width: 4px; }
+.catalog-tree::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Folder nodes */
+.cat-folder { user-select: none; }
+
+.cat-folder-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s;
+}
+.cat-folder-header:hover { background: var(--bg-hover); }
+
+.cat-chevron { font-size: 10px; color: var(--text-muted); min-width: 10px; }
+.cat-folder-icon { font-size: 13px; }
+.cat-folder-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); flex: 1; }
+.cat-count {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  padding: 1px 5px;
+  border-radius: 8px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.cat-children {
+  padding-left: 16px;
+  border-left: 1px solid rgba(45,74,56,0.5);
+  margin-left: 14px;
+}
+
+.cat-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 3px 8px;
+  font-style: italic;
+}
+
+/* Leaf layer items */
+.cat-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s;
+  user-select: none;
+}
+.cat-item:hover { background: var(--bg-hover); }
+.cat-item.selected { background: var(--bg-active); }
+
+.cat-file-icon { font-size: 12px; flex-shrink: 0; }
+.cat-item-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-item-actions {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.cat-item:hover .cat-item-actions { opacity: 1; }
+
+.cat-action-btn {
+  width: 18px; height: 18px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.cat-action-btn svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 2; }
+.cat-action-btn:hover { background: var(--bg-active); color: var(--text-primary); }
+
+/* Context menu for catalog */
+.dc-ctx-menu {
+  position: fixed;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 9999;
+  min-width: 180px;
+  padding: 4px;
+}
+.dc-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 0.1s;
+}
+.dc-ctx-item svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; }
+.dc-ctx-item:hover { background: var(--bg-hover); }
+.dc-ctx-item.danger { color: var(--danger); }
+.dc-ctx-sep { height: 1px; background: var(--border); margin: 3px 0; }
+
+/* ---- SYMBOLOGY PANEL — docked mode ---- */
+.sym-tabs {
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.sym-section {
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sym-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ---- SYMBOL SHAPE GRID ---- */
+.symbol-shape-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.symbol-shape-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 4px;
+  background: var(--bg-card);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  font-size: 9px;
+  text-transform: capitalize;
+}
+.symbol-shape-btn svg {
+  width: 18px; height: 18px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+.symbol-shape-btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-light); }
+.symbol-shape-btn.active { color: var(--accent); border-color: var(--accent); background: var(--accent-glow); }
+
+/* ---- FELT BUTTON ---- */
+.felt-btn {
+  background: rgba(99, 202, 183, 0.08) !important;
+  color: #63cab7 !important;
+  border-color: rgba(99, 202, 183, 0.3) !important;
+}
+.felt-btn:hover {
+  background: rgba(99, 202, 183, 0.18) !important;
+  border-color: #63cab7 !important;
+  color: #8eeae0 !important;
+}
+.felt-btn svg { stroke: currentColor !important; }
+
+/* ---- LAYER ACTION BUTTON ACTIVE STATE (for style/edit toggle) ---- */
+.layer-action-btn.active { color: var(--accent); background: var(--accent-glow); }
+
+/* ---- LAYER SYMBOLOGY INLINE PANE (renamed from .layer-expand) ---- */
+.layer-symbology {
+  display: none;
+  padding: 8px 10px 10px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  display: none;
+  grid-template-columns: auto 1fr;
+  gap: 6px 8px;
+  align-items: center;
+  font-size: 11px;
+}
+.layer-symbology.open { display: grid; }
+.layer-symbology label { color: var(--text-secondary); }
+.layer-symbology .symbology-color { width: 28px; height: 22px; padding: 1px; border-radius: 3px; border: 1px solid var(--border); cursor: pointer; background: none; }
+.layer-symbology .symbology-full-btn {
+  grid-column: 1/-1;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+/* ---- RIGHT PANEL SYMBOLOGY SCROLL AREA ---- */
+#rp-sym-content {
+  overflow-y: auto;
+  height: 100%;
+}
+#rp-sym-content::-webkit-scrollbar { width: 4px; }
+#rp-sym-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ---- BASEMAP SECTION INSIDE TOC ---- */
+#basemap-section {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#basemap-section .basemap-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+#basemap-section .basemap-list::-webkit-scrollbar { width: 4px; }
+#basemap-section .basemap-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ---- LAYER ORDER BUTTONS ---- */
+.layer-order-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.layer-header:hover .layer-order-btns { opacity: 1; }
+.layer-order-btn {
+  width: 14px; height: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 8px;
+  line-height: 1;
+  padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.layer-order-btn:hover { color: var(--accent); }
+
+/* ---- LAYER ITEM EDITING STATE ---- */
+.layer-item.editing > .layer-header { background: rgba(74,222,128,0.06); }
+.layer-item.editing > .layer-header .layer-name { color: var(--accent); }
+
