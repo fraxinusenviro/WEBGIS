@@ -678,7 +678,7 @@ export class LayerManager {
             layout: {
               'text-field': ['get', style.labelField],
               'text-size': style.labelSize || 12,
-              'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
+              'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
               'text-offset': gt === 'Point' ? [0, 1.2] : [0, 0],
               'text-anchor': gt === 'Point' ? 'top' : 'center',
               'text-max-width': 8,
