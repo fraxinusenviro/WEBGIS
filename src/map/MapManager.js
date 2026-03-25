@@ -12,8 +12,7 @@ export class MapManager {
   }
 
   init(containerId, options = {}) {
-    const basemapId = options.basemap || 'osm';
-    const style = BASEMAPS[basemapId]?.style || BASEMAPS.osm.style;
+    const style = BASEMAPS.none.style;
 
     this._map = new maplibregl.Map({
       container: containerId,
@@ -29,7 +28,7 @@ export class MapManager {
     this._map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
 
     this._basemapMgr = new BasemapManager(this._map);
-    this._currentBasemap = basemapId;
+    this._currentBasemap = 'none';
 
     this._map.on('load', () => {
       bus.emit(EVENTS.MAP_READY, { map: this._map });
@@ -76,30 +75,7 @@ export class MapManager {
   }
 
   setBasemap(basemapId) {
-    if (!BASEMAPS[basemapId]) return;
-    if (basemapId === this._currentBasemap) return;
-
-    const newStyle = BASEMAPS[basemapId].style;
-    this._currentBasemap = basemapId;
-
-    // Preserve current map state
-    const center = this._map.getCenter();
-    const zoom = this._map.getZoom();
-    const bearing = this._map.getBearing();
-    const pitch = this._map.getPitch();
-
-    // We need to collect all user-added layers before style change
-    // They will be re-added by LayerManager after 'styledata' event
-    bus.emit(EVENTS.MAP_BASEMAP, { basemapId, style: newStyle });
-
-    this._map.setStyle(newStyle);
-    this._map.once('styledata', () => {
-      this._map.setCenter(center);
-      this._map.setZoom(zoom);
-      this._map.setBearing(bearing);
-      this._map.setPitch(pitch);
-      bus.emit('map:basemapReady', { basemapId });
-    });
+    // Basemaps are now managed by BasemapLayerManager - no style swapping
   }
 
   getState() {
@@ -128,7 +104,7 @@ export class MapManager {
   }
 
   getMap() { return this._map; }
-  getCurrentBasemap() { return this._currentBasemap; }
+  getCurrentBasemap() { return 'none'; }
 }
 
 export const mapManager = new MapManager();

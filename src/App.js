@@ -1,6 +1,7 @@
 import { bus, EVENTS } from './utils/EventBus.js';
 import { openModal, closeModal } from './ui/Modal.js';
 import { mapManager } from './map/MapManager.js';
+import { basemapLayerManager } from './map/BasemapLayerManager.js';
 import { layerManager } from './layers/LayerManager.js';
 import { importManager } from './io/ImportManager.js';
 import { exportManager } from './io/ExportManager.js';
@@ -116,6 +117,9 @@ export class App {
 
     // Set default tool
     this._setActiveTool('select');
+
+    // Add default OSM basemap
+    basemapLayerManager.addBasemap('osm');
   }
 
   // ---- Toolbar ----
@@ -166,8 +170,8 @@ export class App {
       }
     });
 
-    document.getElementById('basemap-select')?.addEventListener('change', (e) => {
-      mapManager.setBasemap(e.target.value);
+    document.getElementById('btn-add-basemap')?.addEventListener('click', () => {
+      this._tocPanel.showBasemapPicker();
     });
 
     // Settings button — for now shows storage info

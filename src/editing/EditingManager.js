@@ -84,14 +84,9 @@ export class EditingManager {
    * Set which layer new features will be added to
    * Creates a new scratch layer if layerId is null
    */
-  setEditLayer(layerId) {
-    if (!layerId) {
-      // Create a new layer for editing
-      const newLayerId = null;
-      this._editLayerId = newLayerId;
-    } else {
-      this._editLayerId = layerId;
-      // Load existing features into draw
+  setEditLayer(layerId, loadExisting = true) {
+    this._editLayerId = layerId || null;
+    if (layerId && loadExisting) {
       const layer = layerManager.layers.find(l => l.id === layerId);
       if (layer?.data) {
         this._draw.set(layer.data);
