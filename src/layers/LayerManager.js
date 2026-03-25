@@ -294,8 +294,36 @@ export class LayerManager {
     } else { // Point
       const shape = style.pointShape || 'circle';
       const useSymbol = shape !== 'circle' && style.type === 'single';
+      const hasCatShapes = style.type === 'categorized' && style.classificationField && style.classes?.length && style.classes.some(c => c.shape && c.shape !== 'circle');
 
-      if (useSymbol) {
+      if (hasCatShapes) {
+        // Per-category shapes via match expression on icon-image
+        const fallbackKey = this._ensureMarkerImage('circle', style.pointColor || '#60a5fa', (style.pointRadius || 6) * 2, style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
+        const pairs = [];
+        for (const cls of style.classes) {
+          const iconKey = this._ensureMarkerImage(cls.shape || 'circle', cls.color, (style.pointRadius || 6) * 2, style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
+          pairs.push(cls.value, iconKey);
+        }
+        const iconExpr = ['match', ['get', style.classificationField], ...pairs, fallbackKey];
+        const symbolId = `${layer.id}-symbol`;
+        map.addLayer({
+          id: symbolId,
+          type: 'symbol',
+          source: srcId,
+          filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+          layout: {
+            'icon-image': iconExpr,
+            'icon-size': 1,
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+            visibility: layer.visible ? 'visible' : 'none',
+          },
+          paint: {
+            'icon-opacity': ['*', (style.pointOpacity ?? 0.85), layer.opacity],
+          },
+        });
+        layerIds.push(symbolId);
+      } else if (useSymbol) {
         // Custom shape via symbol layer with canvas-drawn icon image
         const iconKey = this._ensureMarkerImage(
           shape,
@@ -593,10 +621,46 @@ export class LayerManager {
         // Handle circle vs symbol shape transitions
         const shape = style.pointShape || 'circle';
         const useSymbol = shape !== 'circle' && style.type === 'single';
+        const hasCatShapes = style.type === 'categorized' && style.classificationField && style.classes?.length && style.classes.some(c => c.shape && c.shape !== 'circle');
         const circleId = `${layer.id}-circle`;
         const symbolId = `${layer.id}-symbol`;
 
-        if (useSymbol) {
+        if (hasCatShapes) {
+          // Remove circle layer if exists
+          if (this._map.getLayer(circleId)) {
+            this._map.removeLayer(circleId);
+            layer._mlLayerIds = layer._mlLayerIds.filter(id => id !== circleId);
+          }
+          // Build match expression for per-category icon-image
+          const fallbackKey = this._ensureMarkerImage('circle', style.pointColor || '#60a5fa', (style.pointRadius || 6) * 2, style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
+          const pairs = [];
+          for (const cls of style.classes) {
+            const iconKey = this._ensureMarkerImage(cls.shape || 'circle', cls.color, (style.pointRadius || 6) * 2, style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
+            pairs.push(cls.value, iconKey);
+          }
+          const iconExpr = ['match', ['get', style.classificationField], ...pairs, fallbackKey];
+          if (!this._map.getLayer(symbolId)) {
+            const srcId = layer._mlSourceId;
+            this._map.addLayer({
+              id: symbolId,
+              type: 'symbol',
+              source: srcId,
+              filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+              layout: {
+                'icon-image': iconExpr,
+                'icon-size': 1,
+                'icon-allow-overlap': true,
+                'icon-ignore-placement': true,
+                visibility: layer.visible ? 'visible' : 'none',
+              },
+              paint: { 'icon-opacity': ['*', (style.pointOpacity ?? 0.85), op] },
+            });
+            if (!layer._mlLayerIds.includes(symbolId)) layer._mlLayerIds.push(symbolId);
+          } else {
+            this._map.setLayoutProperty(symbolId, 'icon-image', iconExpr);
+            this._map.setPaintProperty(symbolId, 'icon-opacity', ['*', (style.pointOpacity ?? 0.85), op]);
+          }
+        } else if (useSymbol) {
           // Remove circle layer if it exists
           if (this._map.getLayer(circleId)) {
             this._map.removeLayer(circleId);

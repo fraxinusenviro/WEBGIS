@@ -81,6 +81,16 @@ export class RightPanel {
     bus.on(EVENTS.LAYER_ADDED, () => this._refreshCatalog());
     bus.on(EVENTS.LAYER_REMOVED, () => this._refreshCatalog());
     bus.on(EVENTS.LAYER_UPDATED, () => this._refreshCatalog());
+
+    // Auto-load symbology when a layer is selected
+    bus.on(EVENTS.LAYER_SELECTED, (layer) => {
+      if (!layer) return;
+      this._currentLayer = layer;
+      const empty = this._panel?.querySelector('#rp-sym-empty');
+      const content = this._symbologyBody;
+      if (empty) empty.style.display = 'none';
+      if (content) { content.style.display = 'flex'; this._symbologyPanel.renderInto(content, layer); }
+    });
   }
 
   switchTab(tabName) {
