@@ -48,7 +48,7 @@ export class RightPanel {
         <div id="rp-symbology-pane" class="rp-pane" style="display:none">
           <div class="rp-sym-empty" id="rp-sym-empty">
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/></svg>
-            <p>Select a layer in the TOC<br>then click the style button.</p>
+            <p>Select a layer in the TOC to edit its symbology.</p>
           </div>
           <div id="rp-sym-content" style="display:none;flex:1;min-height:0;display:none;flex-direction:column"></div>
         </div>
@@ -81,6 +81,16 @@ export class RightPanel {
     bus.on(EVENTS.LAYER_ADDED, () => this._refreshCatalog());
     bus.on(EVENTS.LAYER_REMOVED, () => this._refreshCatalog());
     bus.on(EVENTS.LAYER_UPDATED, () => this._refreshCatalog());
+
+    // Auto-load symbology when a layer is selected
+    bus.on(EVENTS.LAYER_SELECTED, (layer) => {
+      if (!layer) return;
+      this._currentLayer = layer;
+      const empty = this._panel?.querySelector('#rp-sym-empty');
+      const content = this._symbologyBody;
+      if (empty) empty.style.display = 'none';
+      if (content) { content.style.display = 'flex'; this._symbologyPanel.renderInto(content, layer); }
+    });
   }
 
   switchTab(tabName) {

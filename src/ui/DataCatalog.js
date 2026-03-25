@@ -1,6 +1,7 @@
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { layerManager } from '../layers/LayerManager.js';
 import { openModal, closeModal } from './Modal.js';
+import { serviceConnector } from '../io/ServiceConnector.js';
 
 /**
  * DataCatalog — filesystem-style browser rendered into a container element.
@@ -59,6 +60,23 @@ export class DataCatalog {
       this._buildFolderNode('services', '📂 Services',       serviceLayers, l => this._buildLayerNode(l, 'service')),
     ]);
     tree.appendChild(root);
+
+    // Sample Data presets section
+    const presetsSection = document.createElement('div');
+    presetsSection.className = 'catalog-presets';
+    presetsSection.innerHTML = `
+      <div class="catalog-preset-title">Sample Data</div>
+      <div class="catalog-preset-item" id="cat-preset-dtw">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        DTW (Depth to Water) COG
+      </div>
+    `;
+    tree.appendChild(presetsSection);
+
+    presetsSection.querySelector('#cat-preset-dtw')?.addEventListener('click', () => {
+      const url = 'https://nswetlands-mapping.s3.us-east-2.amazonaws.com/COG/DTW_cog.tif';
+      serviceConnector.addCOG(url, { name: 'DTW (Depth to Water)' });
+    });
 
     // New layer button
     this._container.querySelector('#cat-new-layer')?.addEventListener('click', () => {

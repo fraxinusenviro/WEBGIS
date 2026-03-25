@@ -361,7 +361,7 @@ export class SymbologyPanel {
         const type = classType?.value;
         if (!field) return;
         state.classes = this._generateClasses(layer, field, count, type, state.selectedRamp);
-        this._renderClassPreview(container, state.classes);
+        this._renderClassPreview(container, state.classes, layer.geometryType === 'Point');
       });
     }
 
@@ -435,7 +435,7 @@ export class SymbologyPanel {
 
     if (type === 'categorized') {
       const unique = [...new Set(values)].slice(0, count);
-      return unique.map((val, i) => ({ value: val, label: String(val), color: ramp[i % ramp.length] }));
+      return unique.map((val, i) => ({ value: val, label: String(val), color: ramp[i % ramp.length], shape: POINT_SHAPES[i % POINT_SHAPES.length] }));
     }
 
     const nums = values.map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b);
@@ -452,15 +452,43 @@ export class SymbologyPanel {
     }));
   }
 
-  _renderClassPreview(container, classes) {
+  _renderClassPreview(container, classes, isPoint) {
     const preview = container.querySelector('#sym-class-preview');
     if (!preview) return;
-    preview.innerHTML = classes.map(cls => `
-      <div class="class-row">
-        <div class="class-swatch" style="background:${cls.color}"></div>
-        <span class="class-label">${cls.label || cls.value || ''}</span>
-      </div>
-    `).join('');
+    preview.innerHTML = '';
+    classes.forEach((cls, i) => {
+      const row = document.createElement('div');
+      row.className = 'class-row';
+
+      const colorPick = document.createElement('input');
+      colorPick.type = 'color';
+      colorPick.className = 'class-color-pick';
+      colorPick.value = cls.color;
+      colorPick.addEventListener('input', () => { classes[i].color = colorPick.value; });
+
+      const label = document.createElement('span');
+      label.className = 'class-label';
+      label.textContent = cls.label || cls.value || '';
+
+      row.appendChild(colorPick);
+
+      if (isPoint) {
+        const shapeSel = document.createElement('select');
+        shapeSel.className = 'class-shape-sel';
+        POINT_SHAPES.forEach(sh => {
+          const opt = document.createElement('option');
+          opt.value = sh;
+          opt.textContent = sh;
+          if ((cls.shape || 'circle') === sh) opt.selected = true;
+          shapeSel.appendChild(opt);
+        });
+        shapeSel.addEventListener('change', () => { classes[i].shape = shapeSel.value; });
+        row.appendChild(shapeSel);
+      }
+
+      row.appendChild(label);
+      preview.appendChild(row);
+    });
   }
 }
 
