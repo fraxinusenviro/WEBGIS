@@ -217,7 +217,12 @@ export class ImportManager {
       if (dbfBuffer) {
         geojson = combine([parseShp(shpBuffer), parseDbf(dbfBuffer)]);
       } else {
-        geojson = combine([parseShp(shpBuffer)]);
+        // combine() requires a [geoms, props] tuple — build FeatureCollection manually without dbf
+        const geoms = parseShp(shpBuffer);
+        geojson = {
+          type: 'FeatureCollection',
+          features: geoms.map(g => ({ type: 'Feature', geometry: g, properties: {} })),
+        };
       }
     } catch(e) {
       throw new Error('Could not parse shapefile components: ' + e.message);
