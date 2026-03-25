@@ -178,7 +178,8 @@ export class ServiceConnector {
       }
 
       // Render overview as image
-      const overview = await tiff.getImage(image.fileDirectories.length > 1 ? image.fileDirectories.length - 1 : 0);
+      const count = await tiff.getImageCount();
+      const overview = await tiff.getImage(count > 1 ? count - 1 : 0);
       const canvas = await renderGeoTIFFToCanvas(overview);
       const dataUrl = canvas.toDataURL('image/png');
 

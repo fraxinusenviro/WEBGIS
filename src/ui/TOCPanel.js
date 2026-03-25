@@ -60,60 +60,60 @@ export class TOCPanel {
     item.className = `layer-item${layer.visible ? '' : ' hidden-layer'}${this._selectedLayerId === layer.id ? ' selected' : ''}${isEditing ? ' editing' : ''}`;
     item.dataset.layerId = layer.id;
 
-    const styleColor = this._getLayerColor(layer);
-
     item.innerHTML = `
-      <div class="layer-header">
-        <div class="layer-order-btns">
+      <!-- Row 1: type-icon + name + order buttons -->
+      <div class="layer-row-name">
+        <div class="layer-type-icon ${typeIconClass(layer)}" title="${layer.type}">${typeIconSVG(layer)}</div>
+        <span class="layer-name" title="${layer.name}">${layer.name}</span>
+        <div class="layer-order-btns" style="margin-left:auto">
           <button class="layer-order-btn btn-move-up" title="Move up">▲</button>
           <button class="layer-order-btn btn-move-down" title="Move down">▼</button>
         </div>
+      </div>
+      <!-- Row 2: action buttons -->
+      <div class="layer-row-actions">
         <button class="layer-visibility${layer.visible ? '' : ' hidden-layer'}" title="${layer.visible ? 'Hide layer' : 'Show layer'}">
           ${layer.visible ? eyeIcon() : eyeOffIcon()}
         </button>
-        <div class="layer-type-icon ${typeIconClass(layer)}" title="${layer.type}">${typeIconSVG(layer)}</div>
-        <span class="layer-name" title="${layer.name}">${layer.name}</span>
-        <div class="layer-actions">
-          ${isVector ? `<button class="layer-action-btn btn-edit-toggle${isEditing ? ' active' : ''}" title="${isEditing ? 'Stop Editing' : 'Edit Layer'}">
-            <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
-          </button>` : ''}
-          <button class="layer-action-btn btn-style" title="Symbology">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-          </button>
-          <button class="layer-action-btn btn-zoom" title="Zoom to layer">
-            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-          </button>
-          <button class="layer-action-btn btn-table" title="Attribute table" ${!isVector ? 'disabled' : ''}>
-            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
-          </button>
-          <button class="layer-action-btn btn-more" title="More options">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
-          </button>
-          <button class="layer-action-btn danger btn-remove" title="Remove layer">
-            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/></svg>
-          </button>
-        </div>
+        ${isVector ? `<button class="layer-action-btn btn-edit-toggle${isEditing ? ' active' : ''}" title="${isEditing ? 'Stop Editing' : 'Edit Layer'}">
+          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+        </button>` : ''}
+        <button class="layer-action-btn btn-style" title="Symbology">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        </button>
+        <button class="layer-action-btn btn-zoom" title="Zoom to layer">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+        <button class="layer-action-btn btn-table" title="Attribute table" ${!isVector ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+        </button>
+        <button class="layer-action-btn btn-more" title="More options">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+        </button>
+        <button class="layer-action-btn danger btn-remove" title="Remove layer">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/></svg>
+        </button>
       </div>
-      <div class="layer-symbology" id="expand-${layer.id}">
-        ${this._buildSymbologyPane(layer)}
+      <!-- Row 3: collapsible legend -->
+      <div class="layer-legend-wrap">
+        <div class="layer-legend-header">
+          <span class="layer-legend-chevron open">▸</span>
+          <span>Legend</span>
+        </div>
+        <div class="layer-legend-content">
+          ${this._buildLegend(layer)}
+        </div>
       </div>
     `;
 
-    // Events
-    const header = item.querySelector('.layer-header');
-    const expandPanel = item.querySelector('.layer-symbology');
-
-    // Select on click
-    header.addEventListener('click', (e) => {
+    // Row 1: select layer on click (not on buttons)
+    const nameRow = item.querySelector('.layer-row-name');
+    nameRow.addEventListener('click', (e) => {
       if (e.target.closest('button') || e.target.closest('.layer-order-btns')) return;
       this._selectedLayerId = layer.id;
       this.render();
       bus.emit(EVENTS.LAYER_SELECTED, layer);
-    });
-
-    // Expand symbology pane on double-click header
-    header.addEventListener('dblclick', () => {
-      expandPanel.classList.toggle('open');
+      window._rightPanel?.showSymbology(layer);
     });
 
     // Visibility toggle
@@ -149,10 +149,10 @@ export class TOCPanel {
       layerManager.zoomToLayer(layer.id);
     });
 
-    // Style button — toggle inline symbology pane
+    // Style button — open right panel symbology tab
     item.querySelector('.btn-style').addEventListener('click', (e) => {
       e.stopPropagation();
-      expandPanel.classList.toggle('open');
+      bus.emit(EVENTS.SHOW_SYMBOLOGY, layer);
     });
 
     // Attribute table
@@ -178,10 +178,55 @@ export class TOCPanel {
       }
     });
 
-    // Wire inline symbology controls
-    this._bindSymbologyPane(item, layer);
+    // Legend toggle
+    const legendHeader = item.querySelector('.layer-legend-header');
+    const legendContent = item.querySelector('.layer-legend-content');
+    const legendChevron = item.querySelector('.layer-legend-chevron');
+    legendHeader.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = legendContent.style.display !== 'none';
+      legendContent.style.display = isOpen ? 'none' : 'block';
+      legendChevron.classList.toggle('open', !isOpen);
+    });
 
     return item;
+  }
+
+  _buildLegend(layer) {
+    const s = layer.style || {};
+    const isVector = layer.type === 'vector' || layer.type === 'esri-feature';
+    const gt = layer.geometryType;
+
+    if (!isVector) {
+      return `<div class="legend-row"><span class="legend-swatch" style="background:linear-gradient(135deg,#666,#999)"></span><span class="legend-label">Raster</span></div>`;
+    }
+
+    if ((s.type === 'graduated' || s.type === 'categorized') && s.classes?.length) {
+      return s.classes.map(cls => {
+        let swatch = '';
+        if (gt === 'Point') {
+          swatch = `<span class="legend-point" style="background:${cls.color}"></span>`;
+        } else if (gt === 'LineString') {
+          swatch = `<span class="legend-line" style="background:${cls.color}"></span>`;
+        } else {
+          swatch = `<span class="legend-swatch" style="background:${cls.color}"></span>`;
+        }
+        return `<div class="legend-row">${swatch}<span class="legend-label">${cls.label || cls.value || ''}</span></div>`;
+      }).join('');
+    }
+
+    // Single symbol
+    const color = s.fillColor || s.lineColor || s.pointColor || '#888';
+    if (gt === 'Point') {
+      return `<div class="legend-row"><span class="legend-point" style="background:${color};border-color:${s.strokeColor||'rgba(255,255,255,0.3)'}"></span><span class="legend-label">${layer.name}</span></div>`;
+    }
+    if (gt === 'LineString') {
+      return `<div class="legend-row"><span class="legend-line" style="background:${color}"></span><span class="legend-label">${layer.name}</span></div>`;
+    }
+    if (gt === 'Polygon') {
+      return `<div class="legend-row"><span class="legend-swatch" style="background:${color}"></span><span class="legend-label">${layer.name}</span></div>`;
+    }
+    return `<div class="legend-row"><span class="legend-swatch" style="background:#888"></span><span class="legend-label">${layer.name}</span></div>`;
   }
 
   _toggleEditing(layer) {
@@ -329,150 +374,6 @@ export class TOCPanel {
       content.appendChild(btn);
     }
     openModal({ title: 'Add Basemap', content, width: 380 });
-  }
-
-  _buildSymbologyPane(layer) {
-    const s = layer.style || {};
-    const isVector = layer.type === 'vector' || layer.type === 'esri-feature';
-    const gt = layer.geometryType;
-
-    if (!isVector) {
-      // Raster/tile: just opacity slider
-      return `
-        <label>Opacity</label>
-        <div style="display:flex;align-items:center;gap:6px;grid-column:1/-1">
-          <input type="range" class="sym-opacity-slider" min="0" max="1" step="0.05" value="${layer.opacity}" style="flex:1">
-          <span class="sym-opacity-val" style="font-size:11px;min-width:32px;text-align:right">${Math.round(layer.opacity * 100)}%</span>
-        </div>
-        <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
-      `;
-    }
-
-    if (gt === 'Point') {
-      return `
-        <label>Fill</label>
-        <input type="color" class="symbology-color sym-fill-color" value="${s.pointColor || '#60a5fa'}">
-        <label>Radius</label>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="range" class="sym-radius-slider" min="4" max="20" step="1" value="${s.pointRadius || 6}" style="flex:1">
-          <span class="sym-radius-val" style="font-size:11px;min-width:24px;text-align:right">${s.pointRadius || 6}</span>
-        </div>
-        <label>Stroke</label>
-        <input type="color" class="symbology-color sym-stroke-color" value="${s.strokeColor || '#ffffff'}">
-        <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
-      `;
-    }
-
-    if (gt === 'LineString') {
-      return `
-        <label>Color</label>
-        <input type="color" class="symbology-color sym-line-color" value="${s.lineColor || '#f97316'}">
-        <label>Width</label>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input type="range" class="sym-linewidth-slider" min="1" max="10" step="0.5" value="${s.lineWidth || 2}" style="flex:1">
-          <span class="sym-linewidth-val" style="font-size:11px;min-width:24px;text-align:right">${s.lineWidth || 2}</span>
-        </div>
-        <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
-      `;
-    }
-
-    // Polygon
-    return `
-      <label>Fill</label>
-      <input type="color" class="symbology-color sym-fill-color" value="${s.fillColor || '#a78bfa'}">
-      <label>Fill Opacity</label>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input type="range" class="sym-fillopacity-slider" min="0" max="1" step="0.05" value="${s.fillOpacity ?? 0.35}" style="flex:1">
-        <span class="sym-fillopacity-val" style="font-size:11px;min-width:32px;text-align:right">${Math.round((s.fillOpacity ?? 0.35) * 100)}%</span>
-      </div>
-      <label>Stroke</label>
-      <input type="color" class="symbology-color sym-stroke-color" value="${s.strokeColor || '#a78bfa'}">
-      <button class="btn btn-secondary symbology-full-btn">Full Symbology...</button>
-    `;
-  }
-
-  _bindSymbologyPane(item, layer) {
-    const s = layer.style || {};
-    const isVector = layer.type === 'vector' || layer.type === 'esri-feature';
-    const gt = layer.geometryType;
-
-    // Opacity slider (raster/tile only)
-    const opacitySlider = item.querySelector('.sym-opacity-slider');
-    const opacityVal = item.querySelector('.sym-opacity-val');
-    if (opacitySlider) {
-      opacitySlider.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        if (opacityVal) opacityVal.textContent = `${Math.round(val * 100)}%`;
-        layerManager.updateLayer(layer.id, { opacity: val });
-      });
-    }
-
-    // Fill / point color
-    const fillColor = item.querySelector('.sym-fill-color');
-    if (fillColor) {
-      fillColor.addEventListener('input', (e) => {
-        if (gt === 'Point') layerManager.updateStyle(layer.id, { pointColor: e.target.value });
-        else if (gt === 'Polygon') layerManager.updateStyle(layer.id, { fillColor: e.target.value });
-      });
-    }
-
-    // Point radius
-    const radiusSlider = item.querySelector('.sym-radius-slider');
-    const radiusVal = item.querySelector('.sym-radius-val');
-    if (radiusSlider) {
-      radiusSlider.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        if (radiusVal) radiusVal.textContent = val;
-        layerManager.updateStyle(layer.id, { pointRadius: val });
-      });
-    }
-
-    // Stroke color
-    const strokeColor = item.querySelector('.sym-stroke-color');
-    if (strokeColor) {
-      strokeColor.addEventListener('input', (e) => {
-        layerManager.updateStyle(layer.id, { strokeColor: e.target.value });
-      });
-    }
-
-    // Line color
-    const lineColor = item.querySelector('.sym-line-color');
-    if (lineColor) {
-      lineColor.addEventListener('input', (e) => {
-        layerManager.updateStyle(layer.id, { lineColor: e.target.value });
-      });
-    }
-
-    // Line width
-    const lineWidthSlider = item.querySelector('.sym-linewidth-slider');
-    const lineWidthVal = item.querySelector('.sym-linewidth-val');
-    if (lineWidthSlider) {
-      lineWidthSlider.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        if (lineWidthVal) lineWidthVal.textContent = val;
-        layerManager.updateStyle(layer.id, { lineWidth: val });
-      });
-    }
-
-    // Fill opacity
-    const fillOpacitySlider = item.querySelector('.sym-fillopacity-slider');
-    const fillOpacityVal = item.querySelector('.sym-fillopacity-val');
-    if (fillOpacitySlider) {
-      fillOpacitySlider.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        if (fillOpacityVal) fillOpacityVal.textContent = `${Math.round(val * 100)}%`;
-        layerManager.updateStyle(layer.id, { fillOpacity: val });
-      });
-    }
-
-    // Full Symbology button
-    const fullBtn = item.querySelector('.symbology-full-btn');
-    if (fullBtn) {
-      fullBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        bus.emit(EVENTS.SHOW_SYMBOLOGY, layer);
-      });
-    }
   }
 
   _showContextMenu(layer, e) {
