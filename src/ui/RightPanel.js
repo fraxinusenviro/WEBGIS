@@ -50,7 +50,7 @@ export class RightPanel {
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/></svg>
             <p>Select a layer in the TOC<br>then click the style button.</p>
           </div>
-          <div id="rp-sym-content" style="display:none;overflow-y:auto;height:100%"></div>
+          <div id="rp-sym-content" style="display:none;flex:1;min-height:0;display:none;flex-direction:column"></div>
         </div>
       </div>
     `;
@@ -107,7 +107,7 @@ export class RightPanel {
     if (!empty || !content) return;
 
     empty.style.display = 'none';
-    content.style.display = 'block';
+    content.style.display = 'flex';
 
     // Render symbology controls into the panel
     this._symbologyPanel.renderInto(content, layer);

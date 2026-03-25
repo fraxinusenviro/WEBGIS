@@ -245,7 +245,7 @@ export class LayerManager {
         source: srcId,
         filter: ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']],
         paint: {
-          'fill-color': style.fillColor || '#a78bfa',
+          'fill-color': this._getFillExpression(layer),
           'fill-opacity': ['*', (style.fillOpacity ?? 0.35), layer.opacity],
         },
         layout: { visibility: layer.visible ? 'visible' : 'none' },
@@ -271,7 +271,7 @@ export class LayerManager {
     } else if (gt === 'LineString') {
       const lineId = `${layer.id}-line`;
       const paint = {
-        'line-color': style.lineColor || '#f97316',
+        'line-color': this._getFillExpression(layer),
         'line-width': style.lineWidth || 2,
         'line-opacity': ['*', (style.lineOpacity ?? 0.9), layer.opacity],
       };
@@ -331,7 +331,7 @@ export class LayerManager {
           source: srcId,
           filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
           paint: {
-            'circle-color': style.pointColor || '#60a5fa',
+            'circle-color': this._getFillExpression(layer),
             'circle-radius': style.pointRadius || 6,
             'circle-opacity': ['*', (style.pointOpacity ?? 0.85), layer.opacity],
             'circle-stroke-color': style.strokeColor || '#ffffff',
@@ -354,8 +354,7 @@ export class LayerManager {
         layout: {
           'text-field': ['get', style.labelField],
           'text-size': style.labelSize || 12,
-          // Use Noto Sans which is widely available in OpenMapTiles glyph CDN
-          'text-font': ['Noto Sans Regular', 'Open Sans Regular'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
           'text-offset': gt === 'Point' ? [0, 1.2] : [0, 0],
           'text-anchor': gt === 'Point' ? 'top' : 'center',
           'text-max-width': 8,
