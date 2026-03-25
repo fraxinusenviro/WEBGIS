@@ -19,6 +19,7 @@ import { AttributeTable } from './ui/AttributeTable.js';
 import { IdentifyPanel } from './ui/IdentifyPanel.js';
 import { dataCatalog } from './ui/DataCatalog.js';
 import { zoomToScale } from './utils/coordinates.js';
+import { feltManager } from './io/FeltManager.js';
 
 /**
  * App — main orchestrator
@@ -41,7 +42,7 @@ export class App {
     initToast();
 
     // Init map
-    mapManager.init('map', { basemap: 'osm', center: [0, 20], zoom: 3 });
+    mapManager.init('map', { center: [-63.2, 45.0], zoom: 7 });
 
     // Wait for map ready then wire everything up
     bus.on(EVENTS.MAP_READY, () => this._onMapReady());
@@ -70,8 +71,11 @@ export class App {
     // Wire drag-and-drop
     this._bindDragDrop();
 
-    // Wire panel resize handle
+    // Wire panel resize handles
     this._bindResizeHandle();
+    this._bindRightPanelResize();
+    this._bindTocInternalResize();
+    this._bindRightPanelTabs();
 
     // Wire TOC add layer button
     document.getElementById('btn-toc-add-layer')?.addEventListener('click', () => {
@@ -118,8 +122,16 @@ export class App {
     // Set default tool
     this._setActiveTool('select');
 
-    // Add default OSM basemap
-    basemapLayerManager.addBasemap('osm');
+    // Add default basemap stack (bottom → top render order, top → bottom TOC order)
+    // Only if no project was restored (session restore handles its own basemaps)
+    if (!basemapLayerManager.stack.length) {
+      basemapLayerManager.addBasemap('hrdem-dtm-hillshade', { opacity: 1.0, visible: false });
+      basemapLayerManager.addBasemap('hrdem-dsm-hillshade', { opacity: 1.0, visible: false });
+      basemapLayerManager.addBasemap('satellite', { opacity: 1.0, visible: false });
+      basemapLayerManager.addBasemap('esri-imagery-hybrid', { opacity: 1.0, visible: true });
+      basemapLayerManager.addBasemap('hrdem-dtm-hillshade', { opacity: 0.4, visible: true });
+      basemapLayerManager.addBasemap('osm', { opacity: 1.0, visible: false });
+    }
   }
 
   // ---- Toolbar ----
@@ -155,7 +167,11 @@ export class App {
     });
 
     document.getElementById('btn-data-catalog')?.addEventListener('click', () => {
-      this._dataCatalog.open();
+      this._showRightPanel('catalog');
+    });
+
+    document.getElementById('btn-felt-upload')?.addEventListener('click', () => {
+      this._showFeltUploadDialog();
     });
 
     document.getElementById('btn-attribute-table')?.addEventListener('click', () => {
@@ -202,6 +218,8 @@ export class App {
 
   async _showSettings() {
     const usage = await storage.estimateUsage();
+    const feltKey = localStorage.getItem('felt_api_key') || '';
+    const feltMapId = localStorage.getItem('felt_map_id') || '';
     const content = document.createElement('div');
     content.innerHTML = `
       <div class="section-title">Storage</div>
@@ -216,14 +234,33 @@ export class App {
         <label class="form-label">Project Name</label>
         <input type="text" class="form-input" id="settings-proj-name" value="${projectManager.currentProject.name}">
       </div>
-      <div style="margin-top:12px;display:flex;gap:8px">
+      <div class="section-title" style="margin-top:14px">Felt Integration</div>
+      <div class="form-group">
+        <label class="form-label">Felt API Key</label>
+        <input type="password" class="form-input" id="settings-felt-key" placeholder="felt_pub_..." value="${feltKey}" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Default Felt Map ID</label>
+        <input type="text" class="form-input" id="settings-felt-map" placeholder="Map ID from Felt URL" value="${feltMapId}">
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" id="settings-save-felt">Save Felt Settings</button>
         <button class="btn btn-danger" id="settings-clear-storage">Clear All Stored Data</button>
       </div>
     `;
-    openModal({ title: 'Settings', content, width: 380 });
+    openModal({ title: 'Settings', content, width: 400 });
 
     content.querySelector('#settings-proj-name')?.addEventListener('change', (e) => {
       projectManager.setName(e.target.value);
+    });
+
+    content.querySelector('#settings-save-felt')?.addEventListener('click', () => {
+      const key = content.querySelector('#settings-felt-key')?.value?.trim();
+      const mapId = content.querySelector('#settings-felt-map')?.value?.trim();
+      if (key) localStorage.setItem('felt_api_key', key);
+      if (mapId) localStorage.setItem('felt_map_id', mapId);
+      bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'Felt settings saved' });
+      closeModal();
     });
 
     content.querySelector('#settings-clear-storage')?.addEventListener('click', async () => {
@@ -231,6 +268,168 @@ export class App {
         await storage.clearAllLayerData();
         bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'Storage cleared' });
       }
+    });
+  }
+
+  _showFeltUploadDialog() {
+    const vectorLayers = layerManager.layers.filter(l => l.type === 'vector' || l.type === 'esri-feature');
+    if (!vectorLayers.length) {
+      bus.emit(EVENTS.SHOW_TOAST, { type: 'warning', message: 'No vector layers to upload' });
+      return;
+    }
+    const apiKey = localStorage.getItem('felt_api_key') || '';
+    const savedMapId = localStorage.getItem('felt_map_id') || '';
+    const content = document.createElement('div');
+    content.innerHTML = `
+      <div class="form-group">
+        <label class="form-label">Layer to Upload</label>
+        <select class="form-select" id="felt-layer-pick">
+          ${vectorLayers.map(l => `<option value="${l.id}">${l.name} (${l.data?.features?.length || 0} features)</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Felt Map ID</label>
+        <input type="text" class="form-input" id="felt-map-id" value="${savedMapId}" placeholder="From Felt map URL">
+      </div>
+      ${!apiKey ? `<p style="font-size:11px;color:var(--warning);margin-bottom:8px">⚠ No Felt API key set — configure in Settings first.</p>` : ''}
+      <div class="form-group" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="felt-export-style" checked>
+        <label style="font-size:12px;cursor:pointer" for="felt-export-style">Export symbology as Felt Style Language (FSL)</label>
+      </div>
+    `;
+    const footer = document.createElement('div');
+    footer.innerHTML = `
+      <button class="btn btn-ghost" id="felt-cancel">Cancel</button>
+      <button class="btn btn-primary" id="felt-upload-btn" ${!apiKey ? 'disabled title="Set Felt API key in Settings"' : ''}>
+        <svg viewBox="0 0 24 24" style="width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;margin-right:4px"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        Upload to Felt
+      </button>
+    `;
+    openModal({ title: 'Upload to Felt', content, footer, width: 420 });
+
+    footer.querySelector('#felt-cancel')?.addEventListener('click', closeModal);
+    footer.querySelector('#felt-upload-btn')?.addEventListener('click', async () => {
+      const layerId = content.querySelector('#felt-layer-pick')?.value;
+      const mapId = content.querySelector('#felt-map-id')?.value?.trim();
+      const withStyle = content.querySelector('#felt-export-style')?.checked;
+      if (!mapId) {
+        bus.emit(EVENTS.SHOW_TOAST, { type: 'error', message: 'Enter a Felt Map ID' });
+        return;
+      }
+      const layer = layerManager.layers.find(l => l.id === layerId);
+      if (!layer) return;
+      closeModal();
+      bus.emit(EVENTS.SHOW_TOAST, { type: 'info', message: `Uploading "${layer.name}" to Felt…` });
+      const result = await feltManager.uploadLayer(layer, mapId, withStyle);
+      if (result.ok) {
+        bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: `Uploaded to Felt: ${layer.name}` });
+      } else {
+        bus.emit(EVENTS.SHOW_TOAST, { type: 'error', message: `Felt upload failed: ${result.error}` });
+      }
+    });
+  }
+
+  // ---- Right panel ----
+  _showRightPanel(tab) {
+    const panel = document.getElementById('right-panel');
+    if (!panel) return;
+    const isOpen = !panel.classList.contains('collapsed');
+    const currentTab = panel.dataset.activeTab;
+    if (isOpen && currentTab === tab) {
+      panel.classList.add('collapsed');
+    } else {
+      panel.classList.remove('collapsed');
+      this._activateRightTab(tab);
+    }
+  }
+
+  _activateRightTab(tab) {
+    const panel = document.getElementById('right-panel');
+    if (!panel) return;
+    panel.dataset.activeTab = tab;
+    panel.querySelectorAll('.rpanel-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    panel.querySelectorAll('.rpanel-content').forEach(c => c.classList.toggle('active', c.dataset.tab === tab));
+    // Refresh catalog if switching to it
+    if (tab === 'catalog') dataCatalog.renderInto(document.getElementById('rpanel-catalog-body'));
+  }
+
+  _bindRightPanelTabs() {
+    document.querySelectorAll('.rpanel-tab').forEach(btn => {
+      btn.addEventListener('click', () => this._activateRightTab(btn.dataset.tab));
+    });
+    document.getElementById('btn-collapse-right')?.addEventListener('click', () => {
+      document.getElementById('right-panel')?.classList.toggle('collapsed');
+    });
+    // Listen for symbology events to open right panel
+    bus.on(EVENTS.SHOW_SYMBOLOGY, (layer) => {
+      this._showRightPanel('symbology');
+    });
+    // Listen for layer selection to open symbology
+    bus.on(EVENTS.LAYER_SELECTED, (layer) => {
+      if (layer) {
+        const panel = document.getElementById('right-panel');
+        if (panel && !panel.classList.contains('collapsed') && panel.dataset.activeTab === 'symbology') {
+          // already open, symbology panel will update itself
+        }
+      }
+    });
+  }
+
+  // ---- Right panel resize handle ----
+  _bindRightPanelResize() {
+    const handle = document.getElementById('right-resize-handle');
+    const panel = document.getElementById('right-panel');
+    if (!handle || !panel) return;
+    let dragging = false, startX, startW;
+    handle.addEventListener('mousedown', (e) => {
+      dragging = true; startX = e.clientX; startW = panel.offsetWidth;
+      handle.classList.add('active');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const newW = Math.max(220, Math.min(600, startW - (e.clientX - startX)));
+      panel.style.width = `${newW}px`;
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false; handle.classList.remove('active');
+      document.body.style.userSelect = ''; document.body.style.cursor = '';
+    });
+  }
+
+  // ---- TOC internal vertical resize (layers / basemaps split) ----
+  _bindTocInternalResize() {
+    const handle = document.getElementById('toc-vsplit-handle');
+    const layerList = document.getElementById('layer-list');
+    const bmSection = document.getElementById('basemap-section');
+    if (!handle || !layerList || !bmSection) return;
+
+    let dragging = false, startY, startLayerH;
+    handle.addEventListener('mousedown', (e) => {
+      dragging = true;
+      startY = e.clientY;
+      startLayerH = layerList.offsetHeight;
+      handle.classList.add('active');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'row-resize';
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const tocH = document.getElementById('toc-panel').offsetHeight
+        - document.querySelector('#toc-panel .panel-header').offsetHeight
+        - document.querySelector('#toc-panel .panel-footer')?.offsetHeight
+        - (document.querySelector('.toc-section-header')?.offsetHeight || 0)
+        - handle.offsetHeight - 48;
+      const newH = Math.max(60, Math.min(tocH, startLayerH + e.clientY - startY));
+      layerList.style.flex = 'none';
+      layerList.style.height = `${newH}px`;
+    });
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false; handle.classList.remove('active');
+      document.body.style.userSelect = ''; document.body.style.cursor = '';
     });
   }
 
@@ -300,7 +499,7 @@ export class App {
     });
 
     document.getElementById('ctrl-home')?.addEventListener('click', () => {
-      mapManager.map?.flyTo({ center: [0, 20], zoom: 3 });
+      mapManager.map?.flyTo({ center: [-63.2, 45.0], zoom: 7, duration: 800 });
     });
 
     document.getElementById('ctrl-location')?.addEventListener('click', () => {

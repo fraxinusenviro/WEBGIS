@@ -17,8 +17,8 @@ export class MapManager {
     this._map = new maplibregl.Map({
       container: containerId,
       style,
-      center: options.center || [0, 20],
-      zoom: options.zoom || 3,
+      center: options.center || [-63.2, 45.0],
+      zoom: options.zoom || 7,
       bearing: options.bearing || 0,
       pitch: options.pitch || 0,
       attributionControl: false,

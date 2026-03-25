@@ -31,8 +31,8 @@ export class BasemapLayerManager {
 
   get stack() { return [...this._stack]; }
 
-  /** Add a basemap from preset id */
-  addBasemap(presetId) {
+  /** Add a basemap from preset id, with optional initial overrides */
+  addBasemap(presetId, options = {}) {
     if (presetId === 'none') return null;
     const preset = BASEMAPS[presetId];
     if (!preset) return null;
@@ -49,9 +49,9 @@ export class BasemapLayerManager {
       tiles: srcObj.tiles,
       tileSize: srcObj.tileSize || 256,
       maxzoom: srcObj.maxzoom || 19,
-      opacity: 1.0,
-      saturation: 0,
-      visible: true,
+      opacity: options.opacity !== undefined ? options.opacity : 1.0,
+      saturation: options.saturation !== undefined ? options.saturation : 0,
+      visible: options.visible !== undefined ? options.visible : true,
     };
 
     this._stack.push(entry);

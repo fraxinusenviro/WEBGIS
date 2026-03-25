@@ -288,23 +288,47 @@ export class LayerManager {
       layerIds.push(lineId);
 
     } else { // Point
-      const circleId = `${layer.id}-circle`;
-      map.addLayer({
-        id: circleId,
-        type: 'circle',
-        source: srcId,
-        filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
-        paint: {
-          'circle-color': style.pointColor || '#60a5fa',
-          'circle-radius': style.pointRadius || 6,
-          'circle-opacity': ['*', (style.pointOpacity ?? 0.85), layer.opacity],
-          'circle-stroke-color': style.strokeColor || '#ffffff',
-          'circle-stroke-width': style.strokeWidth || 1.5,
-          'circle-stroke-opacity': ['*', (style.strokeOpacity ?? 1), layer.opacity],
-        },
-        layout: { visibility: layer.visible ? 'visible' : 'none' },
-      });
-      layerIds.push(circleId);
+      const sym = style.pointSymbol || 'circle';
+      if (sym === 'circle') {
+        const circleId = `${layer.id}-circle`;
+        map.addLayer({
+          id: circleId,
+          type: 'circle',
+          source: srcId,
+          filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+          paint: {
+            'circle-color': style.pointColor || '#60a5fa',
+            'circle-radius': style.pointRadius || 6,
+            'circle-opacity': ['*', (style.pointOpacity ?? 0.85), layer.opacity],
+            'circle-stroke-color': style.strokeColor || '#ffffff',
+            'circle-stroke-width': style.strokeWidth || 1.5,
+            'circle-stroke-opacity': ['*', (style.strokeOpacity ?? 1), layer.opacity],
+          },
+          layout: { visibility: layer.visible ? 'visible' : 'none' },
+        });
+        layerIds.push(circleId);
+      } else {
+        // Non-circle symbols rendered via symbol layer with canvas-generated icon
+        const iconName = `wgis-sym-${sym}`;
+        this._ensureSymbolImage(map, sym, style.pointColor || '#60a5fa', style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
+        const symId = `${layer.id}-symbol`;
+        map.addLayer({
+          id: symId,
+          type: 'symbol',
+          source: srcId,
+          filter: ['any', ['==', ['geometry-type'], 'Point'], ['==', ['geometry-type'], 'MultiPoint']],
+          layout: {
+            'icon-image': iconName,
+            'icon-size': (style.pointRadius || 6) / 8,
+            'icon-allow-overlap': true,
+            visibility: layer.visible ? 'visible' : 'none',
+          },
+          paint: {
+            'icon-opacity': ['*', (style.pointOpacity ?? 0.85), layer.opacity],
+          },
+        });
+        layerIds.push(symId);
+      }
     }
 
     // Label layer (if labelField set)
@@ -317,7 +341,7 @@ export class LayerManager {
         layout: {
           'text-field': ['get', style.labelField],
           'text-size': style.labelSize || 12,
-          'text-font': ['Open Sans Regular'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
           'text-offset': gt === 'Point' ? [0, 1.2] : [0, 0],
           'text-anchor': gt === 'Point' ? 'top' : 'center',
           visibility: layer.visible ? 'visible' : 'none',
@@ -552,12 +576,39 @@ export class LayerManager {
         }
       } else {
         const circleId = `${layer.id}-circle`;
-        if (this._map.getLayer(circleId)) {
+        const symId    = `${layer.id}-symbol`;
+        const sym = style.pointSymbol || 'circle';
+
+        if (sym === 'circle') {
+          // Remove symbol layer if switching back to circle
+          if (this._map.getLayer(symId)) { this._map.removeLayer(symId); layer._mlLayerIds = layer._mlLayerIds.filter(id => id !== symId); }
+          if (!this._map.getLayer(circleId)) {
+            // Re-add circle layer
+            this._addVectorLayer(layer);
+            return;
+          }
           this._map.setPaintProperty(circleId, 'circle-color', this._getFillExpression(layer));
           this._map.setPaintProperty(circleId, 'circle-radius', style.pointRadius || 6);
           this._map.setPaintProperty(circleId, 'circle-opacity', ['*', (style.pointOpacity ?? 0.85), op]);
           this._map.setPaintProperty(circleId, 'circle-stroke-color', style.strokeColor || '#ffffff');
           this._map.setPaintProperty(circleId, 'circle-stroke-width', style.strokeWidth || 1.5);
+        } else {
+          // Remove circle layer if switching away from circle
+          if (this._map.getLayer(circleId)) { this._map.removeLayer(circleId); layer._mlLayerIds = layer._mlLayerIds.filter(id => id !== circleId); }
+          const iconName = `wgis-sym-${sym}`;
+          // Regenerate image with new colors
+          if (this._map.hasImage(iconName)) this._map.removeImage(iconName);
+          this._ensureSymbolImage(this._map, sym, style.pointColor || '#60a5fa', style.strokeColor || '#ffffff', style.strokeWidth || 1.5);
+          if (this._map.getLayer(symId)) {
+            this._map.setLayoutProperty(symId, 'icon-image', iconName);
+            this._map.setLayoutProperty(symId, 'icon-size', (style.pointRadius || 6) / 8);
+            this._map.setPaintProperty(symId, 'icon-opacity', ['*', (style.pointOpacity ?? 0.85), op]);
+          } else {
+            // Add symbol layer fresh
+            this._removeFromMap(layer);
+            this._addToMap(layer);
+            return;
+          }
         }
       }
 
@@ -565,7 +616,6 @@ export class LayerManager {
       const labelId = `${layer.id}-label`;
       if (style.labelField) {
         if (!this._map.getLayer(labelId)) {
-          // Add label layer if it doesn't exist
           const srcId = layer._mlSourceId;
           this._map.addLayer({
             id: labelId,
@@ -574,7 +624,7 @@ export class LayerManager {
             layout: {
               'text-field': ['get', style.labelField],
               'text-size': style.labelSize || 12,
-              'text-font': ['Open Sans Regular'],
+              'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
               'text-offset': gt === 'Point' ? [0, 1.2] : [0, 0],
               'text-anchor': gt === 'Point' ? 'top' : 'center',
               visibility: layer.visible ? 'visible' : 'none',
@@ -591,6 +641,10 @@ export class LayerManager {
           this._map.setLayoutProperty(labelId, 'text-field', ['get', style.labelField]);
           this._map.setLayoutProperty(labelId, 'text-size', style.labelSize || 12);
           this._map.setPaintProperty(labelId, 'text-color', style.labelColor || '#ffffff');
+          this._map.setPaintProperty(labelId, 'text-halo-color', style.labelHaloColor || '#0d1a10');
+          this._map.setPaintProperty(labelId, 'text-halo-width', style.labelHaloWidth || 1);
+          this._map.setPaintProperty(labelId, 'text-opacity', op);
+          this._map.setLayoutProperty(labelId, 'visibility', layer.visible ? 'visible' : 'none');
         }
       } else if (this._map.getLayer(labelId)) {
         this._map.removeLayer(labelId);
@@ -745,6 +799,92 @@ export class LayerManager {
     const layer = this._getLayer(layerId);
     if (!layer) return [];
     return this._map.queryRenderedFeatures(point, { layers: layer._mlLayerIds });
+  }
+
+  /** Generate and cache a symbol image on the map for non-circle point types */
+  _ensureSymbolImage(map, sym, fillColor, strokeColor, strokeWidth) {
+    const iconName = `wgis-sym-${sym}`;
+    if (map.hasImage(iconName)) return;
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const cx = size / 2, cy = size / 2, r = size * 0.38;
+
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = Math.max(1, strokeWidth * 1.5);
+
+    ctx.beginPath();
+    switch (sym) {
+      case 'square':
+        ctx.rect(cx - r, cy - r, r * 2, r * 2);
+        break;
+      case 'triangle':
+        ctx.moveTo(cx, cy - r);
+        ctx.lineTo(cx + r, cy + r);
+        ctx.lineTo(cx - r, cy + r);
+        ctx.closePath();
+        break;
+      case 'diamond':
+        ctx.moveTo(cx, cy - r);
+        ctx.lineTo(cx + r, cy);
+        ctx.lineTo(cx, cy + r);
+        ctx.lineTo(cx - r, cy);
+        ctx.closePath();
+        break;
+      case 'cross': {
+        const arm = r * 0.35;
+        ctx.rect(cx - arm, cy - r, arm * 2, r * 2);
+        ctx.rect(cx - r, cy - arm, r * 2, arm * 2);
+        break;
+      }
+      case 'x': {
+        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+        ctx.lineWidth = r * 0.55;
+        ctx.strokeStyle = fillColor;
+        ctx.stroke();
+        // Also draw outer stroke
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = Math.max(1, strokeWidth * 1.5);
+        ctx.beginPath();
+        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+        ctx.stroke();
+        const imgData = ctx.getImageData(0, 0, size, size);
+        map.addImage(iconName, { width: size, height: size, data: imgData.data });
+        return;
+      }
+      case 'star': {
+        const spikes = 5, outerR = r, innerR = r * 0.4;
+        for (let i = 0; i < spikes * 2; i++) {
+          const angle = (i * Math.PI) / spikes - Math.PI / 2;
+          const rad = i % 2 === 0 ? outerR : innerR;
+          if (i === 0) ctx.moveTo(cx + rad * Math.cos(angle), cy + rad * Math.sin(angle));
+          else ctx.lineTo(cx + rad * Math.cos(angle), cy + rad * Math.sin(angle));
+        }
+        ctx.closePath();
+        break;
+      }
+      case 'octagon': {
+        const sides = 8;
+        for (let i = 0; i < sides; i++) {
+          const angle = (i * 2 * Math.PI) / sides - Math.PI / 8;
+          if (i === 0) ctx.moveTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+          else ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+        }
+        ctx.closePath();
+        break;
+      }
+      default:
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    const imgData = ctx.getImageData(0, 0, size, size);
+    map.addImage(iconName, { width: size, height: size, data: imgData.data });
   }
 
   /** Query all visible vector layers at a point */

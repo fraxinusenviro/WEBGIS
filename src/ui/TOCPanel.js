@@ -5,6 +5,7 @@ import { editingManager } from '../editing/EditingManager.js';
 import { basemapLayerManager, BM_EVENTS } from '../map/BasemapLayerManager.js';
 import { BASEMAPS } from '../map/BasemapManager.js';
 import { openModal, closeModal } from './Modal.js';
+import { feltManager } from '../io/FeltManager.js';
 
 /**
  * TOCPanel — Table of Contents (layer list)
@@ -499,6 +500,10 @@ export class TOCPanel {
         <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Export as KML
       </div>
+      <div class="ctx-item" data-action="export-fsl">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        Export FSL Style (Felt)
+      </div>
       ` : ''}
       <div class="ctx-sep"></div>
       <div class="ctx-item" data-action="zoom">
@@ -541,6 +546,7 @@ export class TOCPanel {
       case 'export-shp': exportManager.exportShapefile(layer.id); break;
       case 'export-csv': exportManager.exportCSV(layer.id); break;
       case 'export-kml': exportManager.exportKML(layer.id); break;
+      case 'export-fsl': feltManager.exportFSL(layer); break;
       case 'zoom': layerManager.zoomToLayer(layer.id); break;
       case 'remove':
         if (confirm(`Remove "${layer.name}"?`)) layerManager.removeLayer(layer.id);

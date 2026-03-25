@@ -128,13 +128,66 @@ export const BASEMAPS = {
     },
   },
 
+  // ---- Canadian Elevation (NRCan) ----
+  'hrdem-dtm-hillshade': {
+    name: 'HRDEM DTM Hillshade',
+    style: {
+      version: 8,
+      sources: {
+        hrdem_dtm: {
+          type: 'raster',
+          tiles: ['https://datacube.services.geo.ca/ows/elevation?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=hrdem-dtm%3Ahillshade&CRS=EPSG%3A3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'],
+          tileSize: 256,
+          attribution: '© Natural Resources Canada',
+          maxzoom: 17,
+        },
+      },
+      layers: [{ id: 'hrdem_dtm', type: 'raster', source: 'hrdem_dtm' }],
+    },
+  },
+
+  'hrdem-dsm-hillshade': {
+    name: 'HRDEM DSM Hillshade',
+    style: {
+      version: 8,
+      sources: {
+        hrdem_dsm: {
+          type: 'raster',
+          tiles: ['https://datacube.services.geo.ca/ows/elevation?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image%2Fpng&TRANSPARENT=true&LAYERS=hrdem-dsm%3Ahillshade&CRS=EPSG%3A3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}'],
+          tileSize: 256,
+          attribution: '© Natural Resources Canada',
+          maxzoom: 17,
+        },
+      },
+      layers: [{ id: 'hrdem_dsm', type: 'raster', source: 'hrdem_dsm' }],
+    },
+  },
+
+  // ---- ESRI ----
+  'esri-imagery-hybrid': {
+    name: 'ESRI Imagery Hybrid',
+    style: {
+      version: 8,
+      sources: {
+        esri_hybrid: {
+          type: 'raster',
+          tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+          tileSize: 256,
+          attribution: 'Tiles © Esri',
+          maxzoom: 20,
+        },
+      },
+      layers: [{ id: 'esri_hybrid', type: 'raster', source: 'esri_hybrid' }],
+    },
+  },
+
   none: {
     name: 'None',
     style: {
       version: 8,
+      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
       sources: {},
       layers: [],
-      background: { color: '#0d1a10' },
     },
   },
 };
