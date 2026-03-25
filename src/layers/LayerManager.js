@@ -671,7 +671,6 @@ export class LayerManager {
       const labelId = `${layer.id}-label`;
       if (style.labelField) {
         if (!this._map.getLayer(labelId)) {
-          // Add label layer if it doesn't exist
           const srcId = layer._mlSourceId;
           this._map.addLayer({
             id: labelId,
@@ -871,6 +870,92 @@ export class LayerManager {
     const layer = this._getLayer(layerId);
     if (!layer) return [];
     return this._map.queryRenderedFeatures(point, { layers: layer._mlLayerIds });
+  }
+
+  /** Generate and cache a symbol image on the map for non-circle point types */
+  _ensureSymbolImage(map, sym, fillColor, strokeColor, strokeWidth) {
+    const iconName = `wgis-sym-${sym}`;
+    if (map.hasImage(iconName)) return;
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const cx = size / 2, cy = size / 2, r = size * 0.38;
+
+    ctx.fillStyle = fillColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = Math.max(1, strokeWidth * 1.5);
+
+    ctx.beginPath();
+    switch (sym) {
+      case 'square':
+        ctx.rect(cx - r, cy - r, r * 2, r * 2);
+        break;
+      case 'triangle':
+        ctx.moveTo(cx, cy - r);
+        ctx.lineTo(cx + r, cy + r);
+        ctx.lineTo(cx - r, cy + r);
+        ctx.closePath();
+        break;
+      case 'diamond':
+        ctx.moveTo(cx, cy - r);
+        ctx.lineTo(cx + r, cy);
+        ctx.lineTo(cx, cy + r);
+        ctx.lineTo(cx - r, cy);
+        ctx.closePath();
+        break;
+      case 'cross': {
+        const arm = r * 0.35;
+        ctx.rect(cx - arm, cy - r, arm * 2, r * 2);
+        ctx.rect(cx - r, cy - arm, r * 2, arm * 2);
+        break;
+      }
+      case 'x': {
+        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+        ctx.lineWidth = r * 0.55;
+        ctx.strokeStyle = fillColor;
+        ctx.stroke();
+        // Also draw outer stroke
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = Math.max(1, strokeWidth * 1.5);
+        ctx.beginPath();
+        ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+        ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+        ctx.stroke();
+        const imgData = ctx.getImageData(0, 0, size, size);
+        map.addImage(iconName, { width: size, height: size, data: imgData.data });
+        return;
+      }
+      case 'star': {
+        const spikes = 5, outerR = r, innerR = r * 0.4;
+        for (let i = 0; i < spikes * 2; i++) {
+          const angle = (i * Math.PI) / spikes - Math.PI / 2;
+          const rad = i % 2 === 0 ? outerR : innerR;
+          if (i === 0) ctx.moveTo(cx + rad * Math.cos(angle), cy + rad * Math.sin(angle));
+          else ctx.lineTo(cx + rad * Math.cos(angle), cy + rad * Math.sin(angle));
+        }
+        ctx.closePath();
+        break;
+      }
+      case 'octagon': {
+        const sides = 8;
+        for (let i = 0; i < sides; i++) {
+          const angle = (i * 2 * Math.PI) / sides - Math.PI / 8;
+          if (i === 0) ctx.moveTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+          else ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+        }
+        ctx.closePath();
+        break;
+      }
+      default:
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    const imgData = ctx.getImageData(0, 0, size, size);
+    map.addImage(iconName, { width: size, height: size, data: imgData.data });
   }
 
   /** Query all visible vector layers at a point */

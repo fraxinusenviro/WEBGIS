@@ -21,6 +21,7 @@ import { dataCatalog } from './ui/DataCatalog.js';
 import { RightPanel } from './ui/RightPanel.js';
 import { feltManager } from './felt/FeltManager.js';
 import { zoomToScale } from './utils/coordinates.js';
+import { feltManager } from './io/FeltManager.js';
 
 /**
  * App — main orchestrator
@@ -66,6 +67,9 @@ export class App {
     this._bindFileInputs();
     this._bindDragDrop();
     this._bindResizeHandle();
+    this._bindRightPanelResize();
+    this._bindTocInternalResize();
+    this._bindRightPanelTabs();
 
     // TOC add layer button
     document.getElementById('btn-toc-add-layer')?.addEventListener('click', () => {
@@ -210,6 +214,8 @@ export class App {
 
   async _showSettings() {
     const usage = await storage.estimateUsage();
+    const feltKey = localStorage.getItem('felt_api_key') || '';
+    const feltMapId = localStorage.getItem('felt_map_id') || '';
     const content = document.createElement('div');
     content.innerHTML = `
       <div class="section-title">Storage</div>

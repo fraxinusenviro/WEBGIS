@@ -217,9 +217,9 @@ export const BASEMAPS = {
     name: 'None',
     style: {
       version: 8,
+      glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
       sources: {},
       layers: [],
-      background: { color: '#0d1a10' },
     },
   },
 };

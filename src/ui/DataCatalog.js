@@ -12,7 +12,7 @@ export class DataCatalog {
     this._selectedLayerId = null;
     this._expandedFolders = new Set(['vectors', 'rasters', 'services']);
 
-    bus.on(EVENTS.LAYER_ADDED, () => this._refresh());
+    bus.on(EVENTS.LAYER_ADDED,   () => this._refresh());
     bus.on(EVENTS.LAYER_REMOVED, () => this._refresh());
     bus.on(EVENTS.LAYER_UPDATED, () => this._refresh());
     // Legacy: handle SHOW_DATA_CATALOG event (toolbar button)
@@ -170,7 +170,6 @@ export class DataCatalog {
 
     div.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      e.stopPropagation();
       this._showContextMenu(layer, e);
     });
 
@@ -216,6 +215,8 @@ export class DataCatalog {
         }
       });
     });
+
+    setTimeout(() => document.addEventListener('click', () => this._closeCtxMenu(), { once: true }), 0);
   }
 
   _closeCtxMenu() {
@@ -232,9 +233,9 @@ export class DataCatalog {
       <div class="form-group">
         <label class="form-label">Geometry Type</label>
         <select class="form-select" id="dc-geom-type">
-          <option value="Point" ${geometryType === 'Point' ? 'selected' : ''}>Point</option>
+          <option value="Point"      ${geometryType === 'Point'      ? 'selected' : ''}>Point</option>
           <option value="LineString" ${geometryType === 'LineString' ? 'selected' : ''}>LineString</option>
-          <option value="Polygon" ${geometryType === 'Polygon' ? 'selected' : ''}>Polygon</option>
+          <option value="Polygon"    ${geometryType === 'Polygon'    ? 'selected' : ''}>Polygon</option>
         </select>
       </div>
       <div class="dc-section-title" style="padding:8px 0 4px">Schema Fields</div>
@@ -247,15 +248,13 @@ export class DataCatalog {
           <tbody id="dc-schema-body"></tbody>
         </table>
       </div>
-      <button class="btn btn-secondary btn-add-field" id="dc-add-field">+ Add Field</button>
+      <button class="btn btn-secondary" id="dc-add-field" style="margin-top:6px;font-size:11px">+ Add Field</button>
     `;
-
     const footer = document.createElement('div');
     footer.innerHTML = `
       <button class="btn btn-ghost" id="dc-cancel">Cancel</button>
       <button class="btn btn-primary" id="dc-create">Create Layer</button>
     `;
-
     openModal({ title: 'Create New Layer', content, footer, width: 520 });
 
     const schemaBody = document.getElementById('dc-schema-body');
@@ -267,9 +266,9 @@ export class DataCatalog {
         <td><input type="text" placeholder="default"></td>
         <td style="text-align:center"><input type="checkbox" class="req-chk"></td>
         <td style="text-align:center"><input type="checkbox" class="uuid-chk"></td>
-        <td><button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" data-action="remove-row">✕</button></td>
+        <td><button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" data-rm>✕</button></td>
       `;
-      row.querySelector('[data-action="remove-row"]').addEventListener('click', () => row.remove());
+      row.querySelector('[data-rm]').addEventListener('click', () => row.remove());
       schemaBody.appendChild(row);
     };
     document.getElementById('dc-add-field').addEventListener('click', addField);
@@ -315,7 +314,7 @@ export class DataCatalog {
           <tbody id="dc-edit-schema-body"></tbody>
         </table>
       </div>
-      <button class="btn btn-secondary btn-add-field" id="dc-edit-add-field">+ Add Field</button>
+      <button class="btn btn-secondary" id="dc-edit-add-field" style="margin-top:6px;font-size:11px">+ Add Field</button>
     `;
     const footer = document.createElement('div');
     footer.innerHTML = `
@@ -332,11 +331,11 @@ export class DataCatalog {
         <td><select>${['String','Number','Integer','Boolean','Date'].map(t =>
           `<option ${(field?.type || 'String') === t ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
         <td><input type="text" placeholder="default" value="${field?.defaultValue || ''}"></td>
-        <td style="text-align:center"><input type="checkbox" class="req-chk" ${field?.required ? 'checked' : ''}></td>
-        <td style="text-align:center"><input type="checkbox" class="uuid-chk" ${field?.isUUID ? 'checked' : ''}></td>
-        <td><button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" data-action="remove-row">✕</button></td>
+        <td style="text-align:center"><input type="checkbox" class="req-chk" ${field?.required?'checked':''}></td>
+        <td style="text-align:center"><input type="checkbox" class="uuid-chk" ${field?.isUUID?'checked':''}></td>
+        <td><button class="btn btn-ghost" style="padding:2px 6px;font-size:11px" data-rm>✕</button></td>
       `;
-      row.querySelector('[data-action="remove-row"]').addEventListener('click', () => row.remove());
+      row.querySelector('[data-rm]').addEventListener('click', () => row.remove());
       schemaBody.appendChild(row);
     };
     for (const field of existing) addFieldRow(field);
