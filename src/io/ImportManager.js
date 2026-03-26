@@ -1,9 +1,9 @@
 import shp, { parseShp, parseDbf, combine } from 'shpjs';
-import * as GeoTIFF from 'geotiff';
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { detectCRS, reprojectGeoJSON, transformCoord } from '../utils/coordinates.js';
 import { layerManager } from '../layers/LayerManager.js';
 import { uid } from '../utils/uid.js';
+import { probeCog, cogTileUrl } from './CogProtocol.js';
 
 /**
  * ImportManager — handles file-based and service-based data ingestion
@@ -245,6 +245,37 @@ export class ImportManager {
 
   // ---- GeoTIFF / COG ----
   async _importGeoTIFF(file) {
+    // Create a persistent object URL so the CogProtocol can make range requests
+    // against the in-memory file (the URL is kept alive for the session).
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+      // probeCog reads just the IFD/overview via range requests — no full load
+      const { bbox: [xmin, ymin, xmax, ymax], epsg, spp } = await probeCog(objectUrl);
+
+      await layerManager.addLayer({
+        name: file.name.replace(/\.[^.]+$/, ''),
+        type: 'cog',
+        url: objectUrl,
+        tileUrl: cogTileUrl(objectUrl),
+        bbox: [[xmin, ymin], [xmax, ymax]],
+        opacity: 1.0,
+        sourceFormat: 'geotiff',
+        metadata: { epsg, spp, localFile: true, fileName: file.name },
+      });
+      bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: `Imported ${file.name}` });
+    } catch(e) {
+      // If the COG protocol fails (e.g. non-COG GeoTIFF without overviews),
+      // fall back to the simple full-read canvas approach.
+      URL.revokeObjectURL(objectUrl);
+      console.warn('CogProtocol import failed, falling back to canvas render:', e.message);
+      await this._importGeoTIFFFallback(file);
+    }
+  }
+
+  // Fallback: render the entire GeoTIFF to a canvas image (for small / non-COG files)
+  async _importGeoTIFFFallback(file) {
+    const GeoTIFF = await import('geotiff');
     const arrayBuffer = await file.arrayBuffer();
     const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
     const image = await tiff.getImage();
@@ -252,11 +283,9 @@ export class ImportManager {
     const bbox = image.getBoundingBox();
     const [minX, minY, maxX, maxY] = bbox;
 
-    // Render to canvas
     const canvas = await renderGeoTIFFToCanvas(image);
     const dataUrl = canvas.toDataURL('image/png');
 
-    // Try to detect projection
     const geoKeys = image.getGeoKeys();
     let crs = 'EPSG:4326';
     if (geoKeys?.ProjectedCSTypeGeoKey) {
@@ -265,7 +294,6 @@ export class ImportManager {
       crs = `EPSG:${geoKeys.GeographicTypeGeoKey}`;
     }
 
-    // Reproject bbox corners to WGS84 if needed
     let finalBbox = [[minX, minY], [maxX, maxY]];
     if (crs !== 'EPSG:4326') {
       try {
@@ -273,7 +301,7 @@ export class ImportManager {
         const ne = transformCoord([maxX, maxY], crs, 'EPSG:4326');
         finalBbox = [sw, ne];
       } catch(e) {
-        console.warn('CRS transform failed for GeoTIFF, using raw bbox');
+        console.warn('CRS transform failed for GeoTIFF fallback, using raw bbox');
       }
     }
 
@@ -285,7 +313,7 @@ export class ImportManager {
       opacity: 1.0,
       sourceFormat: 'geotiff',
     });
-    bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: `Imported ${file.name}` });
+    bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: `Imported ${file.name} (static render)` });
   }
 
   // ---- MBTiles ----

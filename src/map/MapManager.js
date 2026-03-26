@@ -2,6 +2,10 @@ import maplibregl from 'maplibre-gl';
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { BasemapManager, BASEMAPS } from './BasemapManager.js';
 import { formatDD, formatDMS, lngLatToMercator, zoomToScale } from '../utils/coordinates.js';
+import { registerCogProtocol } from '../io/CogProtocol.js';
+
+// Register the cog:// protocol for streaming COG tile rendering
+registerCogProtocol(maplibregl);
 
 // Nova Scotia approximate bounding box center and zoom
 const NS_CENTER = [-63.0, 45.0];

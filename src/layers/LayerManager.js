@@ -505,21 +505,40 @@ export class LayerManager {
   }
 
   _addCOGLayer(layer) {
-    // COG rendered as image source with known bounds
+    // COG rendered via streaming tile protocol (cog://) — no full file download.
+    // Falls back to the legacy image-source approach if tileUrl is absent
+    // (e.g. layers loaded from an older project save).
     const map = this._map;
-    if (!layer.imageUrl || !layer.bbox) return;
-
     const srcId = layer._mlSourceId;
-    const [[minX, minY], [maxX, maxY]] = layer.bbox;
 
-    map.addSource(srcId, {
-      type: 'image',
-      url: layer.imageUrl,
-      coordinates: [
-        [minX, maxY], [maxX, maxY],
-        [maxX, minY], [minX, minY],
-      ],
-    });
+    if (layer.tileUrl) {
+      // Preferred path: tile-based streaming
+      map.addSource(srcId, {
+        type: 'raster',
+        tiles: [layer.tileUrl],
+        tileSize: 256,
+        // Restrict tile requests to the known data extent
+        ...(layer.bbox ? (() => {
+          const [[minX, minY], [maxX, maxY]] = layer.bbox;
+          return { bounds: [minX, minY, maxX, maxY] };
+        })() : {}),
+      });
+    } else if (layer.imageUrl && layer.bbox) {
+      // Legacy fallback: static image source
+      const [[minX, minY], [maxX, maxY]] = layer.bbox;
+      map.addSource(srcId, {
+        type: 'image',
+        url: layer.imageUrl,
+        coordinates: [
+          [minX, maxY], [maxX, maxY],
+          [maxX, minY], [minX, minY],
+        ],
+      });
+    } else {
+      console.warn('_addCOGLayer: layer has neither tileUrl nor imageUrl+bbox', layer.id);
+      return;
+    }
+
     const mlId = `${layer.id}-cog`;
     map.addLayer({
       id: mlId,
