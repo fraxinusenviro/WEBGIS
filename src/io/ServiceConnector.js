@@ -1,6 +1,7 @@
 import { bus, EVENTS } from '../utils/EventBus.js';
 import { layerManager } from '../layers/LayerManager.js';
 import { reprojectGeoJSON, transformCoord } from '../utils/coordinates.js';
+import { probeCog, cogTileUrl } from './CogProtocol.js';
 
 /**
  * ServiceConnector — handles connection to web map services
@@ -152,46 +153,26 @@ export class ServiceConnector {
   }
 
   /**
-   * Add a Cloud-Optimized GeoTIFF (COG) via URL
+   * Add a Cloud-Optimized GeoTIFF (COG) via URL.
+   * Uses HTTP range requests for streaming tile-based rendering — no full download.
    */
   async addCOG(url, params = {}) {
-    const { fromUrl } = await import('geotiff');
     bus.emit(EVENTS.SHOW_TOAST, { type: 'info', message: 'Fetching COG metadata…' });
 
     try {
-      const tiff = await fromUrl(url);
-      const image = await tiff.getImage();
-      const bbox = image.getBoundingBox();
-      const [minX, minY, maxX, maxY] = bbox;
-
-      const geoKeys = image.getGeoKeys();
-      let crs = 'EPSG:4326';
-      if (geoKeys?.ProjectedCSTypeGeoKey) crs = `EPSG:${geoKeys.ProjectedCSTypeGeoKey}`;
-
-      let finalBbox = [[minX, minY], [maxX, maxY]];
-      if (crs !== 'EPSG:4326') {
-        try {
-          const sw = transformCoord([minX, minY], crs, 'EPSG:4326');
-          const ne = transformCoord([maxX, maxY], crs, 'EPSG:4326');
-          finalBbox = [sw, ne];
-        } catch(e) {}
-      }
-
-      // Render overview as image
-      const count = await tiff.getImageCount();
-      const overview = await tiff.getImage(count > 1 ? count - 1 : 0);
-      const canvas = await renderGeoTIFFToCanvas(overview);
-      const dataUrl = canvas.toDataURL('image/png');
+      // probeCog uses range requests to read just the IFD / overview for metadata + stats
+      const { bbox: [xmin, ymin, xmax, ymax], epsg, spp } = await probeCog(url);
 
       await layerManager.addLayer({
         name: params.name || url.split('/').pop() || 'COG',
         type: 'cog',
         url,
-        imageUrl: dataUrl,
-        bbox: finalBbox,
+        // tileUrl uses the cog:// protocol — tiles are rendered on demand
+        tileUrl: cogTileUrl(url),
+        bbox: [[xmin, ymin], [xmax, ymax]],
         opacity: 1.0,
         sourceFormat: 'cog',
-        metadata: { geoKeys },
+        metadata: { epsg, spp },
       });
       bus.emit(EVENTS.SHOW_TOAST, { type: 'success', message: 'COG layer added' });
     } catch(e) {
@@ -279,43 +260,6 @@ function buildWMTSTileUrl(url, params) {
   const tilematrixset = params.tilematrixset || 'EPSG:3857';
 
   return `${url}?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=${layer}&STYLE=${style}&FORMAT=${format}&TILEMATRIXSET=${tilematrixset}&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`;
-}
-
-async function renderGeoTIFFToCanvas(image) {
-  const width = Math.min(image.getWidth(), 2048);
-  const height = Math.min(image.getHeight(), 2048);
-  const data = await image.readRasters({ interleave: true, width, height });
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  const imageData = ctx.createImageData(width, height);
-  const spp = image.getSamplesPerPixel();
-  let idx = 0;
-
-  if (spp >= 3) {
-    for (let i = 0; i < width * height; i++) {
-      imageData.data[idx++] = data[i * spp];
-      imageData.data[idx++] = data[i * spp + 1];
-      imageData.data[idx++] = data[i * spp + 2];
-      imageData.data[idx++] = spp >= 4 ? data[i * spp + 3] : 255;
-    }
-  } else {
-    const sample = Array.from(data).slice(0, Math.min(10000, data.length));
-    const min = Math.min(...sample);
-    const max = Math.max(...sample);
-    const range = max - min || 1;
-    for (let i = 0; i < width * height; i++) {
-      const v = Math.round(((data[i] - min) / range) * 255);
-      imageData.data[idx++] = v;
-      imageData.data[idx++] = v;
-      imageData.data[idx++] = v;
-      imageData.data[idx++] = 255;
-    }
-  }
-  ctx.putImageData(imageData, 0, 0);
-  return canvas;
 }
 
 export const serviceConnector = new ServiceConnector();
